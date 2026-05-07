@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MRI Protocol Assessment Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:#f5f6f8;--surface:#ffffff;--surface2:#eef0f4;--surface3:#e4e7ed;
+  --border:#d4d8e0;--border2:#c0c6d2;
+  --accent:#2563eb;--accent2:#1d4ed8;--accent-light:#dbeafe;
+  --text:#1e293b;--text-dim:#64748b;--text-muted:#94a3b8;
+  --green:#16a34a;--green-bg:#dcfce7;--red:#dc2626;--red-bg:#fef2f2;
+  --yellow:#d97706;--yellow-bg:#fef9c3;--purple:#7c3aed;--purple-bg:#ede9fe;
+  --hdr:60px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+#intro-screen{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;background:#0f172a;}
+#intro-screen.fade-out{animation:fadeOut .8s ease forwards;}
+@keyframes fadeOut{to{opacity:0;pointer-events:none;}}
+#intro-canvas{position:absolute;inset:0;width:100%;height:100%;}
+.intro-content{position:relative;z-index:2;text-align:center;animation:introReveal 1s ease .4s both;}
+@keyframes introReveal{from{opacity:0;transform:translateY(20px) scale(.97);}to{opacity:1;transform:none;}}
+.intro-logo{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:4px;color:#60a5fa;text-transform:uppercase;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.25);padding:6px 16px;border-radius:20px;display:inline-block;margin-bottom:24px;}
+.intro-title{font-size:clamp(26px,5vw,50px);font-weight:700;line-height:1.1;background:linear-gradient(135deg,#f1f5f9,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:14px;}
+.intro-sub{font-size:15px;color:#94a3b8;max-width:500px;margin:0 auto 36px;line-height:1.7;}
+.intro-stats{display:flex;gap:16px;justify-content:center;margin-bottom:36px;flex-wrap:wrap;}
+.intro-stat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px 22px;text-align:center;min-width:100px;backdrop-filter:blur(8px);}
+.intro-stat-n{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;color:#60a5fa;}
+.intro-stat-l{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-top:3px;}
+.intro-btn{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;padding:14px 42px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .25s;box-shadow:0 4px 24px rgba(37,99,235,.35);}
+.intro-btn:hover{transform:translateY(-2px);box-shadow:0 8px 36px rgba(37,99,235,.5);}
+.scan-line{position:absolute;left:0;right:0;height:1px;z-index:1;background:linear-gradient(90deg,transparent,rgba(96,165,250,.5),transparent);animation:scanDown 5s linear infinite;pointer-events:none;}
+@keyframes scanDown{0%{top:-2px;opacity:0;}10%{opacity:1;}90%{opacity:1;}100%{top:100%;opacity:0;}}
+
+#login-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:900;align-items:center;justify-content:center;flex-direction:column;}
+#login-screen.show{display:flex;}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:480px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.06);}
+.login-card h2{font-size:20px;font-weight:700;margin-bottom:4px;}
+.login-card p{color:var(--text-dim);font-size:13px;margin-bottom:24px;line-height:1.6;}
+.login-input-wrap{margin-bottom:16px;}
+.login-input-wrap input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border .2s;}
+.login-input-wrap input:focus{border-color:var(--accent);}
+.login-input-wrap input::placeholder{color:var(--text-muted);}
+.existing-users-label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;}
+.existing-users{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+.user-chip{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;}
+.user-chip:hover{border-color:var(--accent);color:var(--accent);}
+.user-chip-progress{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);}
+.user-chip-del{width:18px;height:18px;border-radius:50%;background:transparent;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);cursor:pointer;transition:all .15s;margin-left:2px;flex-shrink:0;line-height:1;}
+.user-chip-del:hover{background:var(--red);border-color:var(--red);color:#fff;}
+.login-btn{background:var(--accent);color:#fff;border:none;padding:13px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;width:100%;box-shadow:0 2px 12px rgba(37,99,235,.2);}
+.login-btn:hover{background:var(--accent2);}
+
+#module-screen{display:none;}#module-screen.show{display:flex;flex-direction:column;align-items:center;min-height:100vh;}
+.module-hero{padding:60px 24px 32px;text-align:center;width:100%;}
+.module-hero h1{font-size:clamp(20px,3.5vw,30px);font-weight:700;margin-bottom:6px;}
+.module-hero p{color:var(--text-dim);font-size:14px;}
+.user-greeting{display:inline-flex;align-items:center;gap:8px;background:var(--accent-light);border:1px solid rgba(37,99,235,.15);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--accent);margin-bottom:20px;}
+.pace-note{background:var(--yellow-bg);border:1px solid rgba(217,119,6,.2);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--yellow);max-width:640px;margin:0 auto 28px;line-height:1.5;}
+.module-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:840px;width:100%;padding:0 24px 40px;}
+@media(max-width:620px){.module-grid{grid-template-columns:1fr;}}
+.module-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.module-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.08);}
+.module-card.completed{border-color:var(--green);}.module-card.in-progress{border-color:var(--yellow);}
+.module-tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;padding:3px 8px;border-radius:5px;display:inline-block;margin-bottom:12px;}
+.tag-abd{background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(217,119,6,.2);}
+.tag-neuro{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(124,58,237,.2);}
+.module-card h3{font-size:16px;font-weight:700;margin-bottom:4px;}
+.module-card p{font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;}
+.module-meta{display:flex;align-items:center;justify-content:space-between;}
+.module-cases{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);}
+.module-progress-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:10px;overflow:hidden;}
+.module-progress-fill{height:100%;border-radius:2px;transition:width .4s;}
+.progress-abd{background:var(--yellow);}.progress-neuro{background:var(--purple);}.progress-done{background:var(--green);}
+.module-status-badge{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:4px;}
+.badge-new{background:var(--surface2);color:var(--text-dim);}.badge-progress{background:var(--yellow-bg);color:var(--yellow);}.badge-done{background:var(--green-bg);color:var(--green);}
+.finish-wrap{padding:0 24px 60px;width:100%;max-width:840px;}
+.finish-btn{width:100%;background:var(--green);color:#fff;border:none;padding:14px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;box-shadow:0 2px 12px rgba(22,163,74,.2);}
+.finish-btn:hover{background:#15803d;transform:translateY(-1px);}
+
+#test-header{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--hdr);background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:none;align-items:center;justify-content:space-between;padding:0 16px;}
+#test-header.show{display:flex;}
+.hdr-left{display:flex;align-items:center;gap:10px;}
+.hdr-back{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-dim);font-family:'DM Sans',sans-serif;transition:all .15s;}
+.hdr-back:hover{border-color:var(--accent);color:var(--accent);}
+.hdr-module{font-weight:600;font-size:14px;}.hdr-case{font-size:12px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+.hdr-right{display:flex;align-items:center;gap:12px;}
+.hdr-timer{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-dim);background:var(--surface2);padding:5px 10px;border-radius:6px;}
+
+#test-body{display:none;padding-top:80px;padding-bottom:90px;max-width:800px;margin:0 auto;width:100%;padding-left:16px;padding-right:16px;}
+#test-body.show{display:block;}
+.case-card{background:linear-gradient(135deg,#eef2ff,#e8f0fe);border:2px solid var(--accent);border-radius:14px;padding:22px 24px;margin-bottom:20px;box-shadow:0 4px 16px rgba(37,99,235,.1);position:sticky;top:68px;z-index:100;}
+.case-num{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;font-weight:600;}
+.case-sub{font-size:22px;font-weight:700;margin-bottom:10px;line-height:1.3;color:var(--text);}
+.case-desc{font-size:17px;color:var(--text);line-height:1.7;font-weight:500;}
+.case-instruction{font-size:12px;color:var(--text-muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--surface3);}
+
+.seq-category{margin-bottom:16px;}
+.seq-cat-title{font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px;border-bottom:1px solid var(--surface3);margin-bottom:8px;}
+.seq-option{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:all .15s;background:var(--surface);}
+.seq-option:hover{border-color:var(--accent);background:var(--accent-light);}
+.seq-option.selected{border-color:var(--accent);background:var(--accent-light);}
+.seq-check{width:18px;height:18px;border:2px solid var(--border2);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
+.seq-option.selected .seq-check{background:var(--accent);border-color:var(--accent);}
+.seq-option.selected .seq-check::after{content:'\2713';color:#fff;font-size:12px;font-weight:700;}
+.seq-label{font-size:13px;line-height:1.4;}
+
+#bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.95);backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:12px 16px;z-index:200;}
+#bottom-nav.show{display:flex;align-items:center;justify-content:space-between;}
+.nav-left{display:flex;gap:8px;}
+.nav-btn{padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;border:1px solid var(--border);}
+.nav-prev{background:var(--surface);color:var(--text);}.nav-prev:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}.nav-prev:disabled{opacity:.4;cursor:not-allowed;}
+.nav-break{background:var(--yellow-bg);color:var(--yellow);border-color:rgba(217,119,6,.2);}.nav-break:hover{background:#fef3c7;}
+.nav-next{background:var(--accent);color:#fff;border-color:var(--accent);}.nav-next:hover{background:var(--accent2);}
+.nav-finish{background:var(--green);color:#fff;border-color:var(--green);}.nav-finish:hover{background:#15803d;}
+.nav-progress{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);}
+
+#break-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:500;align-items:center;justify-content:center;}
+#break-overlay.show{display:flex;}
+.break-card{background:var(--surface);border-radius:16px;padding:36px;text-align:center;max-width:400px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.12);}
+.break-card h3{font-size:18px;font-weight:700;margin-bottom:8px;}.break-card p{font-size:13px;color:var(--text-dim);margin-bottom:24px;line-height:1.6;}
+.break-resume{background:var(--accent);color:#fff;border:none;padding:12px 32px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+
+#complete-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:500;align-items:center;justify-content:center;}
+#complete-overlay.show{display:flex;}
+.complete-card{background:var(--surface);border-radius:16px;padding:40px;text-align:center;max-width:440px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.15);}
+.complete-card h3{font-size:20px;font-weight:700;margin-bottom:6px;}.complete-card p{font-size:13px;color:var(--text-dim);margin-bottom:24px;line-height:1.6;}
+.complete-actions{display:flex;flex-direction:column;gap:10px;}
+.complete-export{background:var(--green);color:#fff;border:none;padding:13px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.complete-export:hover{background:#15803d;}
+.complete-back{background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:12px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.complete-back:hover{border-color:var(--accent);color:var(--accent);}
+
+</style></head><body>
+
+<div id="intro-screen">
+  <canvas id="intro-canvas"></canvas>
+  <div class="scan-line"></div><div class="scan-line" style="animation-delay:2.5s"></div>
+  <div class="intro-content">
+    <div class="intro-logo">Radiology Education</div>
+    <div class="intro-title">MRI Protocol<br>Assessment Tool</div>
+    <div class="intro-sub">Evaluate your MRI protocol knowledge across 100 clinical cases in Abdomen and Neuroradiology.</div>
+    <div class="intro-stats">
+      <div class="intro-stat"><div class="intro-stat-n">100</div><div class="intro-stat-l">Cases</div></div>
+      <div class="intro-stat"><div class="intro-stat-n">4</div><div class="intro-stat-l">Modules</div></div>
+      <div class="intro-stat"><div class="intro-stat-n">2</div><div class="intro-stat-l">Domains</div></div>
+    </div>
+    <button class="intro-btn" onclick="showLogin()">Get Started</button>
+  </div>
+</div>
+<div id="login-screen">
+  <div class="login-card">
+    <h2>Welcome</h2>
+    <p>Enter a nickname to start. Your progress is saved locally.</p>
+    <div class="existing-users" id="existing-users"></div>
+    <div class="login-input-wrap"><input type="text" id="nickname-input" placeholder="Enter your nickname..." maxlength="30" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="login-btn" onclick="doLogin()">Continue</button>
+  </div>
+</div>
+<div id="module-screen">
+  <div class="module-hero">
+    <div class="user-greeting" id="user-greeting"></div>
+    <h1>Select a Module</h1><p>Choose a module to begin or continue.</p>
+  </div>
+  <div class="pace-note"><strong>&#9200; Work at your own pace.</strong> No time limit. Take breaks anytime. Progress is auto-saved.</div>
+  <div class="module-grid" id="module-grid"></div>
+  <div class="finish-wrap" id="finish-wrap" style="display:none">
+    <button class="finish-btn" onclick="finishEvaluation()">&#10004; Finish Evaluation &amp; Export All Results</button>
+  </div>
+</div>
+<div id="test-header">
+  <div class="hdr-left"><button class="hdr-back" onclick="backToModules()">&#8592; Modules</button><span class="hdr-module" id="hdr-module"></span><span class="hdr-case" id="hdr-case"></span></div>
+  <div class="hdr-right"><div class="hdr-timer" id="hdr-timer">00:00:00</div></div>
+</div>
+<div id="test-body">
+  <div class="case-card"><div class="case-num" id="case-num"></div><div class="case-sub" id="case-sub"></div><div class="case-desc" id="case-desc"></div><div class="case-instruction">Select all required MRI sequences for this clinical scenario.</div></div>
+  <div id="seq-options"></div>
+</div>
+<div id="bottom-nav">
+  <div class="nav-left"><button class="nav-btn nav-prev" id="btn-prev" onclick="prevCase()">&#8592; Prev</button><button class="nav-btn nav-break" onclick="takeBreak()">&#9749; Break</button></div>
+  <span class="nav-progress" id="nav-progress"></span>
+  <button class="nav-btn nav-next" id="btn-next" onclick="nextCase()">Next &#8594;</button>
+</div>
+<div id="break-overlay"><div class="break-card"><h3>&#9749; Taking a Break</h3><p>Progress saved. Close and return anytime.</p><button class="break-resume" onclick="resumeFromBreak()">Resume</button></div></div>
+<div id="complete-overlay"><div class="complete-card"><h3 id="complete-title">Module Complete!</h3><p id="complete-msg"></p><div class="complete-actions"><button class="complete-export" onclick="exportModuleResults()">&#128196; Export Results (Excel)</button><button class="complete-back" onclick="closeComplete()">&#8592; Back to Modules</button></div></div></div>
+
+<script>
+
+(function(){
+var canvas=document.getElementById('intro-canvas');if(!canvas)return;
+var ctx=canvas.getContext('2d'),W,H,particles=[],mouse={x:-999,y:-999};
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+resize();window.addEventListener('resize',resize);
+document.addEventListener('mousemove',function(e){mouse.x=e.clientX;mouse.y=e.clientY;});
+var N=80;
+for(var i=0;i<N;i++){particles.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4,r:Math.random()*2+1,pulse:Math.random()*Math.PI*2});}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  particles.forEach(function(p){
+    p.x+=p.vx;p.y+=p.vy;p.pulse+=.02;
+    if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
+    var dx=p.x-mouse.x,dy=p.y-mouse.y,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<120){p.vx+=dx/dist*.15;p.vy+=dy/dist*.15;}
+    p.vx*=.998;p.vy*=.998;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle='rgba(96,165,250,'+(0.3+Math.sin(p.pulse)*.15)+')';ctx.fill();
+  });
+  for(var i=0;i<N;i++){for(var j=i+1;j<N;j++){
+    var dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y,d=Math.sqrt(dx*dx+dy*dy);
+    if(d<150){ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(particles[j].x,particles[j].y);ctx.strokeStyle='rgba(96,165,250,'+(0.12*(1-d/150))+')';ctx.lineWidth=.6;ctx.stroke();}
+  }}
+  if(document.getElementById('intro-screen').style.display!=='none')requestAnimationFrame(draw);
+}
+draw();
+})();
+
+const ALL_CASES = [{"id":0,"domain":"Abdomen","subcategory":"Liver lesion on US (no cirrhosis)","case":"59-year-old male, US shows 3 cm segment VII lesion; no known malignancy.","ground_truth":"Axial T2-weighted (accelerated FSE or single-shot),  Coronal T2-weighted, T1-weighted pre-contrast, Axial T1-weighted in-phase/opposed-phase gradient echo, Dynamic post-contrast (late hepatic arterial, portal venous, 2-5 min delayed) 3D T1-weighted.  Diffusion-weighted imaging with ADC map,Subtrraction images (O)"},{"id":1,"domain":"Abdomen","subcategory":"Liver lesion in cirrhosis","case":"68-year-old male, Cirrhosis (HCV), AFP mildly elevated; new 2 cm lesion on US.","ground_truth":"Axial T2-weighted (accelerated FSE or single-shot),  Coronal T2-weighted, T1-weighted pre-contrast, Axial T1-weighted in-phase/opposed-phase gradient echo, Dynamic post-contrast (late hepatic arterial, portal venous, 2-5 min delayed) 3D T1-weighted.  Diffusion-weighted imaging with ADC map,Subtrraction images (O)"},{"id":2,"domain":"Abdomen","subcategory":"Liver metastasis staging","case":"27-year-old male, Known colon cancer; CT suggests 2,5 cm lesion.","ground_truth":"Axial T2-weighted (accelerated FSE or single-shot),  Coronal T2-weighted, T1-weighted pre-contrast, Axial T1-weighted in-phase/opposed-phase gradient echo, Dynamic post-contrast (late hepatic arterial, portal venous, 2-5 min delayed) 3D T1-weighted.  Diffusion-weighted imaging with ADC map,Subtrraction images (O)"},{"id":3,"domain":"Abdomen","subcategory":"Choledocholithiasis","case":"82-year-old male, RUQ pain, hyperbilirubinemia; CBD borderline on US.","ground_truth":"Axial T2-weighted, Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MRCP (thick slab and/or thin slice). Optional (O): Dynamic post-contrast T1-weighted"},{"id":4,"domain":"Abdomen","subcategory":"Primary sclerosing cholangitis","case":"22-year-old male, UC history; pruritus; elevated ALP; ductal irregularity on US.","ground_truth":"Axial T2-weighted,  Coronal T2-weighted, T1-weighted pre-contrast, Axial T1-weighted in-phase/opposed-phase gradient echo, Dynamic post-contrast (late hepatic arterial, portal venous, 2-5 min delayed) 3D T1-weighted.  Diffusion-weighted imaging with ADC map,Subtrraction images (O)"},{"id":5,"domain":"Abdomen","subcategory":"Cholangiocarcinoma suspicion","case":"73-year-old female, Painless jaundice; hilar ductal dilation.","ground_truth":"Axial T2-weighted, Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MRCP, Diffusion-weighted imaging with ADC map, Dynamic post-contrast (late hepatic arterial, portal venous, 2-5 min delayed) 3D fat-suppressed T1-weighted"},{"id":6,"domain":"Abdomen","subcategory":"Acute pancreatitis complication","case":"26-year-old male, Acute pancreatitis day 7; persistent fever; high WBC; CT suspicious.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted (arterial and portal venous phases). Optional (O): Heavily T2-weighted MRCP, "},{"id":7,"domain":"Abdomen","subcategory":"Chronic pancreatitis vs cancer","case":"29-year-old female, Chronic pancreatitis; new weight loss; pancreatic head fullness.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Heavily T2-weighted MRCP, Dynamic post-contrast fat-suppressed T1-weighted (pancreatic/late arterial, and portal venous phases). Optional (O): Secretin-enhanced MRCP"},{"id":8,"domain":"Abdomen","subcategory":"Pancreatic cyst","case":"25-year-old male, Incidental 2 cm pancreatic hypodensity on CT","ground_truth":"Axial T2-weighted,  Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MRCP. Optional (O): Dynamic post-contrast fat-suppressed T1-weighted, Diffusion-weighted imaging with ADC map"},{"id":9,"domain":"Abdomen","subcategory":"Neuroendocrine tumor","case":"46-year-old male, Hypoglycemic episodes; CT shows hypervascular 2 cm pancreatic lesion.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted (early arterial, pancreatic, portal venous phases). Optional (O): Heavily T2-weighted MRCP"},{"id":10,"domain":"Abdomen","subcategory":"Adrenal incidentaloma","case":"46-year-old male, 3 cm adrenal nodule on CT, No history of malignancy","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase and opposed-phase gradient echo. Optional (O): Dynamic post-contrast T1-weighted, Diffusion-weighted imaging with ADC map"},{"id":11,"domain":"Abdomen","subcategory":"Adrenal in known cancer","case":"35-year-old female, Lung cancer; new 2 cm adrenal lesion.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase and opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Dynamic post-contrast T1-weighted"},{"id":12,"domain":"Abdomen","subcategory":"Renal mass","case":"57-year-old male, Incidental 3 cm indeterminate renal cortical lesion.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted (corticomedullary, nephrographic, and excretory phases). Optional (O): Subtraction images"},{"id":13,"domain":"Abdomen","subcategory":"Hematuria","case":"41-year-old male, Gross hematuria; iodine allergy","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Heavily T2-weighted MR urography, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted, Delayed post-contrast T1-weighted (Excretory phase)"},{"id":14,"domain":"Abdomen","subcategory":"Renal infection","case":"42-year-old female, Pyelonephritis suspected, acute, pregnant, no other complications","ground_truth":"Axial and Coronal motion-insensitive T2-weighted (e.g., SSFSE/HASTE), Axial T1-weighted in-phase/opposed-phase, Diffusion-weighted imaging with ADC map"},{"id":15,"domain":"Abdomen","subcategory":"Kidney transplant dysfunction","case":"25-year-old male, Kidney transplant 2 years; rising creatinine; arterial etiology suspected on US.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase, Diffusion-weighted imaging with ADC map, Non-contrast MR Angiography (e.g., TOF, SSFP) OR 3-D Contrast-enhanced MRA (if GFR permits)"},{"id":16,"domain":"Abdomen","subcategory":"Abdominal aorta endograft follow-up (MRI option)","case":"41-year-old male, EVAR follow-up; CTA avoided (history of allergic reaction).","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted pre-contrast, 3-D Contrast-enhanced MRA, Time-resolved MRA (TWIST, TRICKS,4D-TRAK)"},{"id":17,"domain":"Abdomen","subcategory":"Mesenteric ischemia (chronic)","case":"55-year-old female, known DM, Chronic postprandial pain, weight loss, suspected mesenteric ischemia","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted pre-contrast, Diffusion-weighted imaging with ADC map, 3-D Contrast-enhanced MRA, Dynamic post-contrast fat-suppressed T1-weighted"},{"id":18,"domain":"Abdomen","subcategory":"IBD small bowel (Acute exacerbation)","case":"85-year-old female, Known Crohn; new pain and diarrhea.","ground_truth":"Axial and Coronal motion-insensitive T2-weighted (e.g., SSFSE/HASTE), Coronal T2-weighted with fat suppression, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3-D gradient-echo. "},{"id":19,"domain":"Abdomen","subcategory":"Perianal fistula","case":"61-year-old female, Crohn; perianal discharge.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted pre-contrast, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted"},{"id":20,"domain":"Abdomen","subcategory":"Appendicitis equivocal (MRI)","case":"27-year-old female, Pregnant 18 weeks; RLQ pain; US nondiagnostic.","ground_truth":"Axial and Sagittal motion-insensitive T2-weighted (e.g., SSFSE/HASTE), Coronal T2-weighted, Axial T1-weighted pre-contrast, Diffusion-weighted imaging with ADC map"},{"id":21,"domain":"Abdomen","subcategory":"Pregnancy acute abdomen (biliary)","case":"33-year-old female, Pregnant; RUQ pain; cholestasis.","ground_truth":"Axial and Coronal motion-insensitive T2-weighted (e.g., SSFSE/HASTE), Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MRCP, Diffusion-weighted imaging with ADC map"},{"id":22,"domain":"Abdomen","subcategory":"Endometriosis deep infiltrating","case":"39-year-old female, Cyclic pelvic pain; infertility; suspected deep endometriosis.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted pre-contrast, Axial fat-suppressed T1-weighted, Diffusion-weighted imaging with ADC map. Optional (O): Dynamic post-contrast fat-suppressed 3D T1-weighted, T2-weighted with vaginal/rectal gel"},{"id":23,"domain":"Abdomen","subcategory":"Adenomyosis","case":"37-year-old female, Heavy menses; enlarged uterus on US.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted pre-contrast, Diffusion-weighted imaging with ADC map. Optional (O): Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":24,"domain":"Abdomen","subcategory":"Fibroid mapping for embolization","case":"71-year-old female, Symptomatic fibroids; considering UAE.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted pre-contrast, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":25,"domain":"Abdomen","subcategory":"Ovarian mass indeterminate","case":"27-year-old female, US shows complex 6 cm adnexal mass.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted in-phase/opposed-phase OR fat-suppressed, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3D T1-weighted. Optional (O): Subtraction images"},{"id":26,"domain":"Abdomen","subcategory":"Ovarian cancer staging","case":"61-year-old female, Biopsy-proven ovarian carcinoma.","ground_truth":"Axial T2-weighted (large FOV abdomen/pelvis), Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map (large FOV), Axial T1-weighted, Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":27,"domain":"Abdomen","subcategory":"Cervical cancer staging","case":"56-year-old female, Biopsy-proven cervical cancer.","ground_truth":"Sagittal high-resolution T2-weighted, Axial oblique high-resolution T2-weighted (perpendicular to cervical canal), Coronal oblique high-resolution T2-weighted (parallel to cervical canal), Diffusion-weighted imaging with ADC map, Axial T1-weighted, Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":28,"domain":"Abdomen","subcategory":"Endometrial cancer staging","case":"26-year-old female, Biopsy-proven endometrial carcinoma.","ground_truth":"Sagittal high-resolution T2-weighted, Axial oblique high-resolution T2-weighted (perpendicular to endometrial cavity), Coronal oblique high-resolution T2-weighted (parallel to endometrial cavity), Diffusion-weighted imaging with ADC map, Axial T1-weighted, Dynamic post-contrast fat-suppressed 3D T1-weighted (multiple phases)"},{"id":29,"domain":"Abdomen","subcategory":"Rectal cancer staging","case":"52-year-old female, Biopsy-proven rectal adenocarcinoma.","ground_truth":"Sagittal high-resolution T2-weighted, Axial oblique high-resolution T2-weighted (perpendicular to rectal tumor), Coronal oblique high-resolution T2-weighted (parallel to anal canal), Diffusion-weighted imaging with ADC map, Axial T1-weighted. Optional (O): Dynamic post-contrast fat-suppressed T1-weighted"},{"id":30,"domain":"Abdomen","subcategory":"Rectal cancer restaging","case":"53-year-old male, Rectal cancer post neoadjuvant therapy, locoregional restaging during wait and watch","ground_truth":"Sagittal high-resolution T2-weighted, Axial oblique high-resolution T2-weighted (perpendicular to rectal tumor bed), Coronal oblique high-resolution T2-weighted (parallel to anal canal), Diffusion-weighted imaging with ADC map, Axial T1-weighted. Optional (O): Dynamic post-contrast fat-suppressed T1-weighted"},{"id":31,"domain":"Abdomen","subcategory":"Pelvic floor dysfunction","case":"54-year-old female, vaginal protrusion, suspected pelvic organ prolapse","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Dynamic sagittal T2-weighted (cine SSFP or equivalent) during rest, strain, and defecation. Optional (O): Axial T1-weighted, Diffusion-weighted imaging"},{"id":32,"domain":"Abdomen","subcategory":"Prostate cancer suspicion","case":"62-year-old male, Elevated PSA; lower urinary symptoms","ground_truth":"Axial high-resolution T2-weighted, Sagittal and/or Coronal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, High b-value (\u22651400) DWI, Dynamic contrast-enhanced fat-suppressed T1-weighted. Optional (O): Axial T1-weighted (large FOV)"},{"id":33,"domain":"Abdomen","subcategory":"BPH","case":"60-year-old male, lower urinary symptoms; normal PSA values.","ground_truth":"Axial high-resolution T2-weighted, Sagittal and/or Coronal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, High b-value (\u22651400) DWI. Optional (O): Dynamic contrast-enhanced fat-suppressed T1-weighted"},{"id":34,"domain":"Abdomen","subcategory":"Prostatitis","case":"50-year-old male, dysuria, fever, painful ejeculation","ground_truth":"Axial high-resolution T2-weighted, Sagittal and/or Coronal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, High b-value (\u22651400) DWI, Dynamic contrast-enhanced fat-suppressed T1-weighted"},{"id":35,"domain":"Abdomen","subcategory":"Prostate post-treatment recurrence","case":"70-year-old male, Post prostatectomy; rising PSA.","ground_truth":"Axial high-resolution T2-weighted, Sagittal and/or Coronal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, High b-value (\u22651400) DWI, Dynamic contrast-enhanced fat-suppressed T1-weighted"},{"id":36,"domain":"Abdomen","subcategory":"Uterine anomaly","case":"45-year-old female, Recurrent pregnancy loss; suspected M\u00fcllerian anomaly.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted pre-contrast, Diffusion-weighted imaging with ADC map. Optional (O): Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":37,"domain":"Abdomen","subcategory":"Post-liver transplant biliary complication","case":"47-year-old male, Post liver transplantation; cholestasis; suspected anastomotic stricture.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MRCP, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted (hepatic arterial, portal venous, and delayed phases)"},{"id":38,"domain":"Abdomen","subcategory":"Renal stone with pregnancy (MRI)","case":"37-year-old female, Pregnant; flank pain; US inconclusive.","ground_truth":"Axial and Coronal motion-insensitive T2-weighted (e.g., SSFSE/HASTE), Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MR urography, Diffusion-weighted imaging with ADC map"},{"id":39,"domain":"Abdomen","subcategory":"Hydronephrosis cause","case":"47-year-old male, Progressive hydronephrosis; unknown cause.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase, Heavily T2-weighted MR urography, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted, Delayed post-contrast T1-weighted (Excretory phase)"},{"id":40,"domain":"Abdomen","subcategory":"Retroperitoneal mass","case":"80-year-old male, Incidental 5 cm retroperitoneal mass on CT.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted"},{"id":41,"domain":"Abdomen","subcategory":"Pheochromocytoma","case":"51-year-old female, Paroxysmal hypertension; elevated metanephrines.","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted"},{"id":42,"domain":"Abdomen","subcategory":"Caroli disease","case":"76-year-old female, Recurrent cholangitis; saccular duct dilatation on US. ","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Heavily T2-weighted MRCP, Diffusion-weighted imaging with ADC map, Dynamic post-contrast (late hepatic arterial, portal venous, 2-5 min delayed) 3D fat-suppressed T1-weighted"},{"id":43,"domain":"Abdomen","subcategory":"Ampullary tumor","case":"68-year-old female, Painless jaundice; CT suggests periampullary lesion; GFR: 25 ml/min/1.73m\u00b2","ground_truth":"Axial T2-weighted, Coronal T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, Heavily T2-weighted MRCP, Diffusion-weighted imaging with ADC map. Optional (O): Dynamic post-contrast fat-suppressed T1-weighted"},{"id":44,"domain":"Abdomen","subcategory":"Pelvic inflammatory disease","case":"25-year-old female, Fever; pelvic pain; complex adnexal mass.","ground_truth":"Axial T1-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Sagittal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":45,"domain":"Abdomen","subcategory":"Chronic liver disease fibrosis staging (MR elastography request)","case":"74-year-old male, NAFLD; needs noninvasive fibrosis staging.","ground_truth":"Axial T2-weighted, Axial T1-weighted in-phase/opposed-phase gradient echo, MR Elastography. Optional (O): Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed T1-weighted"},{"id":46,"domain":"Abdomen","subcategory":"Bowel endometriosis","case":"32-year-old female, Cyclic rectal bleeding; pelvic pain.","ground_truth":"Sagittal high-resolution T2-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Axial T1-weighted in-phase/opposed-phase OR fat-suppressed, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3-D T1-weighted. Optional (O): T2-weighted with vaginal/rectal gel"},{"id":47,"domain":"Abdomen","subcategory":"Pregnant appendicitis","case":"32-year-old female,Pregnant, RLQ pain, fever, leukocytosis, appendicitis suspected","ground_truth":"Axial and Sagittal motion-insensitive T2-weighted (e.g., SSFSE/HASTE), Coronal T2-weighted, Axial T1-weighted pre-contrast, Diffusion Weighted Imaging with ADC map"},{"id":48,"domain":"Abdomen","subcategory":"Seminoma imaging","case":"37-year-old male, Testicular cancer, seminoma, post orchiectomy","ground_truth":"Axial T1-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3D T1-weighted (Large FOV including abdomen/retroperitoneum)"},{"id":49,"domain":"Abdomen","subcategory":"Bladder cancer","case":"65-year-old male, gross hematuria, irregular thickening of the bladder wall on US.","ground_truth":"Axial T1-weighted, Axial high-resolution T2-weighted, Coronal high-resolution T2-weighted, Sagittal high-resolution T2-weighted, Diffusion-weighted imaging with ADC map, Dynamic post-contrast fat-suppressed 3D T1-weighted"},{"id":50,"domain":"Neuroradiology","subcategory":"Acute stroke","case":"50-year-old male, Wake-up aphasia; last known well 3 hours ago.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Susceptibility-Sensitive Sequence (T2* or GRE/SWI), MR Angiography "},{"id":51,"domain":"Neuroradiology","subcategory":"TIA","case":"62-year-old male, Transient right arm weakness 15 minutes","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Susceptibility-Sensitive Sequence (T2* or GRE/SWI), MR Angiography "},{"id":52,"domain":"Neuroradiology","subcategory":"Intracerebral hemorrhage with mass question","case":"50-year-old female, Lobar ICH; concern for underlying lesion.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Susceptibility-Sensitive Sequence (T2* or GRE/SWI), Contrast-Enhanced T1-weighted Axial and/or Sagittal"},{"id":53,"domain":"Neuroradiology","subcategory":"Cerebral venous thrombosis","case":"27-year-old female, Postpartum headache + papilledema.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map,  MR Venography, Susceptibility-Sensitive Sequence (T2* or GRE/SWI) (O)"},{"id":54,"domain":"Neuroradiology","subcategory":"Primary CNS vasculitis","case":"35-year-old male, suspected CNS vasculitis.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Contrast-Enhanced T1-weighted Axial and/or Sagittal, MR Angiography "},{"id":55,"domain":"Neuroradiology","subcategory":"Posterior circulation stroke","case":"30-year-old female, Pregnant, acute vertigo, ataxia, nystagmus.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Susceptibility-Sensitive Sequence (T2* or GRE/SWI), Non-contrast MR Angiography (e.g., TOF)"},{"id":56,"domain":"Neuroradiology","subcategory":"Brain tumor initial workup","case":"20-year-old male, New seizures; CT shows left temporal mass.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Contrast-Enhanced T1-weighted Axial and/or Sagittal. Optional (O): MR Perfusion, MR Spectroscopy"},{"id":57,"domain":"Neuroradiology","subcategory":"Glioblastoma post-op follow-up","case":"25-year-old female, Status post GBM resection; on temozolomide.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Contrast-Enhanced T1-weighted Axial and/or Sagittal, MR Perfusion (DSC or DCE), MR Spectroscopy (O)"},{"id":58,"domain":"Neuroradiology","subcategory":"Radiation necrosis vs recurrence","case":"37-year-old female, Post stereotactic radiosurgery metastasis; new enhancement.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion-weighted imaging with ADC map, Contrast-Enhanced T1-weighted Axial and/or Sagittal, MR Perfusion (DSC or DCE), MR Spectroscopy (O)"},{"id":59,"domain":"Neuroradiology","subcategory":"Pituitary macroadenoma","case":"30-year-old female, Bitemporal hemianopsia; prolactin elevated.","ground_truth":"Sagittal T1-weighted, Coronal T1-weighted, Axial T2-weighted, Coronal T2-weighted, Dynamic Contrast-Enhanced Coronal T1-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Coronal and/or Sagittal"},{"id":60,"domain":"Neuroradiology","subcategory":"Cavernous sinus syndrome","case":"22-year-old male, Painful ophthalmoplegia; diplopia; facial sensory loss","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial T2-weighted, Coronal T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, Diffusion Weighted Imaging (O)"},{"id":61,"domain":"Neuroradiology","subcategory":"Optic neuritis","case":"30-year-old female, Acute unilateral vision loss; pain with eye movement.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial T2-weighted, Coronal T2-weighted, Fat-Suppressed T2-weighted or STIR, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal"},{"id":62,"domain":"Neuroradiology","subcategory":"Multiple sclerosis relapse","case":"40-year-old female, Known MS; new sensory symptoms.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Sagittal T2-FLAIR , Diffusion Weighted Imaging, 3D Contrast-Enhanced T1-weighted"},{"id":63,"domain":"Neuroradiology","subcategory":"Creutzfeldt-Jakob disease","case":"32-year-old female, Rapidly progressive dementia, myoclonus.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging"},{"id":64,"domain":"Neuroradiology","subcategory":"Normal pressure hydrocephalus","case":"67-year-old male, Gait disturbance + urinary incontinence + cognitive decline.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging"},{"id":65,"domain":"Neuroradiology","subcategory":"Dementia workup","case":"56-year-old male, Progressive memory loss; rule out structural lesions.","ground_truth":"3D T1 MPRAGE (or equivalent 3D T1 volumetric sequence), Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted (O)"},{"id":66,"domain":"Neuroradiology","subcategory":"Acute seizure first-time","case":"33-year-old male, First generalized tonic-clonic; no fever.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Susceptibility-Sensitive Sequence (T2* or GRE/SWI)(O) , Contrast-Enhanced T1-weighted (O)"},{"id":67,"domain":"Neuroradiology","subcategory":"Epilepsy","case":"36-year-old male, change in seizure pattern","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted, Susceptibility-Sensitive Sequence (SWI/GRE) (O)"},{"id":68,"domain":"Neuroradiology","subcategory":"Epilepsy post-op evaluation","case":"49-year-old male, Post temporal lobectomy; recurrent seizures.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted, Susceptibility-Sensitive Sequence (SWI/GRE) (O)"},{"id":69,"domain":"Neuroradiology","subcategory":"Subacute head trauma neurologic deficit","case":"48-year-old male, head trauma 1 week ago; unexplained neurologic deficits.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Susceptibility-Sensitive Sequence (T2* or GRE/SWI)(O), Contrast-Enhanced T1-weighted (O)"},{"id":70,"domain":"Neuroradiology","subcategory":"Brain abscess","case":"28-year-old female, Fever + focal deficits; immunosuppressed.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted Axial and/or Sagittal, MR Spektroskopi (O)"},{"id":71,"domain":"Neuroradiology","subcategory":"CNS lymphoma","case":"50-year-old male, Immunocompetent; deep periventricular mass.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted Axial and/or Sagittal. "},{"id":72,"domain":"Neuroradiology","subcategory":"Metastasis","case":"32-year-old male, Known breast cancer; headache + CN palsies.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, High-resolution T2-weighted imaging (3D SPACE/ CISS / FIESTA), Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal"},{"id":73,"domain":"Neuroradiology","subcategory":"Acoustic schwannoma","case":"33-year-old male, Progressive unilateral hearing loss.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial T2-weighted, Coronal T2-weighted, High-resolution T2-weighted imaging of the internal auditory canal (3D SPACE/ CISS / FIESTA), Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, Diffusion Weighted Imaging (O)"},{"id":74,"domain":"Neuroradiology","subcategory":"Facial nerve palsy atypical","case":"29-year-old female, Recurrent facial palsy; severe pain.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial T2-weighted, Coronal T2-weighted, High-resolution T2-weighted imaging of the internal auditory canal and facial nerve (3D SPACE/ CISS / FIESTA), Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, Diffusion Weighted Imaging (O)"},{"id":75,"domain":"Neuroradiology","subcategory":"Headache","case":"30-year-old male, sharp, electric shock-like facial pain.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial T2-weighted, Coronal T2-weighted, High-resolution T2-weighted imaging (3D SPACE/ CISS / FIESTA), Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, 3D Time-of-Flight (TOF) MRA"},{"id":76,"domain":"Neuroradiology","subcategory":"Neck mass evaluation","case":"83-year-old male, Non-pulcatile 2 cm neck mass on US.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial Fat-Suppressed T2-weighted or STIR, Coronal Fat-Suppressed T2-weighted or STIR, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, Diffusion Weighted Imaging"},{"id":77,"domain":"Neuroradiology","subcategory":"Aneurysm surveillance","case":"65-year-old female, Known 5 mm ICA aneurysm follow-up","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, MR Angiography  "},{"id":78,"domain":"Neuroradiology","subcategory":"Idiopathic intracranial hypertension","case":"65-year-old female, Headache; papilledema; obese female.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, MR Venography (MRV), Contrast-Enhanced T1-weighted (O)"},{"id":79,"domain":"Neuroradiology","subcategory":"Spinal cord metastasis","case":"67-year-old male, Known prostate cancer; low back pain.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Sagittal T2-weighted, Axial T2-weighted, Sagittal Fat-Suppressed T2-weighted or STIR, Contrast-Enhanced T1-weighted"},{"id":80,"domain":"Neuroradiology","subcategory":"Cauda equina syndrome","case":"63-year-old male, Urinary retention, saddle anesthesia.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Sagittal T2-weighted, Axial T2-weighted, Sagittal Fat-Suppressed T2-weighted or STIR (O)"},{"id":81,"domain":"Neuroradiology","subcategory":"Spinal infection spondylodiscitis","case":"32-year-old male, Fever, worsening back pain, elevated CRP.","ground_truth":"Sagittal T1-weighted, Sagittal T2-weighted, Axial T2-weighted, Sagittal Fat-Suppressed T2-weighted or STIR, Fat-Suppressed Contrast-Enhanced T1-weighted, Diffusion Weighted Imaging (O)"},{"id":82,"domain":"Neuroradiology","subcategory":"Post-op spine infection","case":"52-year-old male, Recent lumbar surgery; wound discharge.","ground_truth":"Sagittal T1-weighted, Sagittal T2-weighted, Axial T2-weighted, Sagittal Fat-Suppressed T2-weighted or STIR, Fat-Suppressed Contrast-Enhanced T1-weighted, Diffusion Weighted Imaging (O)"},{"id":83,"domain":"Neuroradiology","subcategory":"Acute spinal trauma ligamentous","case":"29-year-old male, High-energy trauma; neuro symptoms; CT negative.","ground_truth":"Sagittal T1-weighted, Sagittal T2-weighted, Axial T2-weighted, Sagittal Fat-Suppressed T2-weighted or STIR, Susceptibility-Sensitive Sequence (T2* or GRE/SWI) (O), Diffusion Weighted Imaging (O)"},{"id":84,"domain":"Neuroradiology","subcategory":"Central vertigo vs vestibular","case":"30-year-old male, Persistent spontaneous nystagmus; neuro signs.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, High-resolution T2-weighted imaging of the internal auditory canal (3D SPACE/ CISS / FIESTA), Contrast-Enhanced T1-weighted"},{"id":85,"domain":"Neuroradiology","subcategory":"Brain metastasis","case":"20-year-old male, Breast cancer; new headaches.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted"},{"id":86,"domain":"Neuroradiology","subcategory":"Hypothalamic/pituitary stalk lesion","case":"49-year-old female, Diabetes insipidus; stalk thickening on CT.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Coronal T1-weighted, Axial T2-weighted, Coronal T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Coronal and/or Sagittal"},{"id":87,"domain":"Neuroradiology","subcategory":"Orbital mass","case":"42-year-old male, Proptosis; pain; CT indeterminate.","ground_truth":"Coronal thin-section fat-suppressed T2-weighted or STIR, Coronal T1-weighted, Axial T1-weighted, Coronal T2-weighted with fat suppression , Contrast-Enhanced T1-weighted with fat suppression in at least one plane, Diffusion Weighted Imaging (O)"},{"id":88,"domain":"Neuroradiology","subcategory":"Optic nerve sheath","case":"68-year-old male, Progressive vision loss; infection suspected.","ground_truth":"Coronal thin-section fat-suppressed T2-weighted or STIR, Coronal T1-weighted, Axial T1-weighted, Coronal T2-weighted with fat suppression , Contrast-Enhanced T1-weighted with fat suppression in at least one plane, Diffusion Weighted Imaging (O)"},{"id":89,"domain":"Neuroradiology","subcategory":"Temporal bone/IAC pre-cochlear implant","case":"15-year-old male, Profound SNHL; pre-CI assessment.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial T2-weighted, Coronal T2-weighted, High-resolution T2-weighted imaging of the internal auditory canal (3D SPACE/ CISS), Reformatted oblique sagittal images perpendicular to the long axis of the IAC, Fat-Suppressed Contrast-Enhanced T1-weighted (O)"},{"id":90,"domain":"Neuroradiology","subcategory":"Skull base tumor","case":"55-year-old male, Orophraryngeal neurogenic dysphagia; jugular foramen mass suspected.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial Fat-Suppressed T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, 3-D High-Resolution Heavily T2-weighted Technique, Diffusion Weighted Imaging (O)"},{"id":91,"domain":"Neuroradiology","subcategory":"Cranial neuropathy V","case":"37-year-old male, Facial numbness; masticator weakness.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial Fat-Suppressed T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, 3-D High-Resolution Heavily T2-weighted Technique, Diffusion Weighted Imaging (O)"},{"id":92,"domain":"Neuroradiology","subcategory":"Herpes encephalitis","case":"23-year-old male, Fever, confusion, seizures.","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Susceptibility-Sensitive Sequence (T2* or GRE/SWI), Contrast-Enhanced T1-weighted"},{"id":93,"domain":"Neuroradiology","subcategory":"Meningitis","case":"24-year-old male, Sinusitis history; suspected intracranial complication","ground_truth":"Sagittal T1-weighted, Axial T2-weighted, Axial T2-FLAIR, Diffusion Weighted Imaging, Contrast-Enhanced T1-weighted, Contrast-Enhanced T2-FLAIR (O)"},{"id":94,"domain":"Neuroradiology","subcategory":"CSF leak","case":"83-year-old male, Clear rhinorrhea; post trauma.","ground_truth":"Thin-Section Heavily T2-weighted (CISS / FIESTA / SPACE) Axial and Coronal, Axial T1-weighted, Axial T2-weighted"},{"id":95,"domain":"Neuroradiology","subcategory":"Fungal infection","case":"27-year-old male, acute sinusitis with rapid progression, suspected fungal infection.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial Fat-Suppressed T2-weighted, Coronal Fat-Suppressed T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, Diffusion Weighted Imaging (O)"},{"id":96,"domain":"Neuroradiology","subcategory":"Precocious puberty","case":"7-year-old male, precocious puberty","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Coronal T1-weighted, Axial T2-weighted, Coronal T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Coronal and/or Sagittal"},{"id":97,"domain":"Neuroradiology","subcategory":"Radiculopathy","case":"43-year-old male, acute onset low back pain after heavy lifting.","ground_truth":"Sagittal T1-weighted, Sagittal T2-weighted, Axial T2-weighted"},{"id":98,"domain":"Neuroradiology","subcategory":"Parotid gland mass","case":"42-year-old male, left parotid region mass on US.","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial Fat-Suppressed T2-weighted, Coronal Fat-Suppressed T2-weighted, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal, Diffusion Weighted Imaging (O)"},{"id":99,"domain":"Neuroradiology","subcategory":"Sinonasal mass","case":"35-year-old male, suspected sinonasal mass, GFR: 25 ml/min/1.73m\u00b2","ground_truth":"Sagittal T1-weighted, Axial T1-weighted, Axial Fat-Suppressed T2-weighted, Coronal Fat-Suppressed T2-weighted, Diffusion Weighted Imaging, Fat-Suppressed Contrast-Enhanced T1-weighted Axial and/or Coronal (O)"}];
+const CASE_SEQ_MAP = {
+  0: {correct:["ax_t2_haste", "cor_t2", "t1_pre", "t1_ip_op", "late_art", "portal", "delayed", "dwi"], distractor:["ax_t2_hr", "ax_t2", "cor_t2_hr", "cor_t2_haste", "sag_t2", "early_art", "late_portal", "excretory", "mrcp", "hi_b_dwi", "mre"]},
+  1: {correct:["ax_t2_haste", "cor_t2", "t1_pre", "t1_ip_op", "late_art", "portal", "delayed", "dwi"], distractor:["ax_t2_hr", "ax_t2", "cor_t2_hr", "sag_t2_hr", "sag_t2", "early_art", "late_portal", "excretory", "mrcp", "hi_b_dwi", "mre"]},
+  2: {correct:["ax_t2_haste", "cor_t2", "t1_pre", "t1_ip_op", "late_art", "portal", "delayed", "dwi"], distractor:["ax_t2", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2", "t2_lfov", "early_art", "late_portal", "excretory", "mrcp", "hi_b_dwi", "mre"]},
+  3: {correct:["ax_t2", "t1_ip_op", "mrcp"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2", "cor_t2_hr", "sag_t2", "t1_pre", "dwi", "late_art", "portal", "delayed", "early_art"]},
+  4: {correct:["ax_t2", "cor_t2", "t1_pre", "t1_ip_op", "late_art", "portal", "delayed", "dwi"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "mrcp", "early_art", "late_portal", "excretory", "mre", "hi_b_dwi"]},
+  5: {correct:["ax_t2", "t1_ip_op", "mrcp", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2", "cor_t2_hr", "t1_pre", "early_art", "late_portal", "excretory", "mre", "hi_b_dwi", "ce_mra", "dwi"]},
+  6: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "late_art", "portal"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "mrcp", "early_art", "delayed", "late_portal", "excretory", "hi_b_dwi"]},
+  7: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "mrcp", "late_art", "portal"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "early_art", "late_portal", "delayed", "excretory", "hi_b_dwi", "mre"]},
+  8: {correct:["ax_t2", "cor_t2", "t1_ip_op", "mrcp"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "dwi", "late_art", "portal", "delayed", "early_art", "hi_b_dwi"]},
+  9: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "early_art", "late_art", "portal"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "mrcp", "late_portal", "delayed", "excretory", "mre", "hi_b_dwi"]},
+  10: {correct:["ax_t2", "cor_t2", "t1_ip_op"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2", "t1_pre", "dwi", "late_art", "portal", "delayed", "mrcp", "hi_b_dwi"]},
+  11: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "late_art", "portal"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "early_art", "late_portal", "delayed", "mrcp", "excretory"]},
+  12: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "portal", "late_portal", "delayed"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2", "t1_pre", "late_art", "early_art", "excretory", "mr_urog", "hi_b_dwi"]},
+  13: {correct:["ax_t2", "cor_t2", "t1_ip_op", "mr_urog", "dwi", "late_art", "portal", "excretory"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "mrcp", "late_portal", "delayed", "early_art", "hi_b_dwi"]},
+  14: {correct:["ax_t2_haste", "cor_t2_haste", "t1_ip_op", "dwi"], distractor:["ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_hr", "sag_t2_haste", "sag_t2", "t1_pre", "late_art", "portal", "delayed", "mr_urog"]},
+  15: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "nc_mra"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "late_art", "portal", "delayed", "excretory", "mr_urog", "ce_mra", "time_mra"]},
+  16: {correct:["ax_t2", "cor_t2", "t1_pre", "ce_mra", "time_mra"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_ip_op", "dwi", "late_art", "portal", "delayed", "nc_mra"]},
+  17: {correct:["ax_t2", "cor_t2", "t1_pre", "dwi", "ce_mra", "late_art", "portal"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_ip_op", "early_art", "late_portal", "delayed", "nc_mra", "time_mra", "mr_urog"]},
+  18: {correct:["ax_t2_haste", "cor_t2_haste", "fat_t2", "dwi", "late_art", "portal"], distractor:["ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_hr", "sag_t2", "t1_pre", "t1_ip_op", "early_art", "late_portal", "delayed"]},
+  19: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_pre", "dwi", "late_art", "portal"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "fat_t2", "t1_ip_op", "early_art", "late_portal", "delayed"]},
+  20: {correct:["ax_t2_haste", "sag_t2_haste", "cor_t2", "t1_pre", "dwi"], distractor:["ax_t2", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2_hr", "sag_t2", "t1_ip_op", "late_art", "portal", "delayed", "mrcp", "fat_t2"]},
+  21: {correct:["ax_t2_haste", "cor_t2_haste", "t1_ip_op", "mrcp", "dwi"], distractor:["ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_hr", "sag_t2_haste", "sag_t2", "t1_pre", "late_art", "portal", "delayed"]},
+  22: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_pre", "fat_t2", "dwi"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_ip_op", "t2_oblik", "late_art", "portal", "cine_ssfp"]},
+  23: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_pre", "dwi"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_ip_op", "fat_t2", "late_art", "portal", "t2_oblik"]},
+  24: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_pre", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_ip_op", "fat_t2", "early_art", "late_portal"]},
+  25: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_ip_op", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "fat_t2", "early_art", "late_portal", "excretory"]},
+  26: {correct:["t2_lfov", "sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "dwi", "t1_ip_op", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "t1_pre", "fat_t2", "early_art", "late_portal", "excretory", "t2_oblik"]},
+  27: {correct:["sag_t2_hr", "t2_oblik", "cor_t2_hr", "dwi", "t1_ip_op", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "fat_t2", "early_art", "late_portal", "excretory"]},
+  28: {correct:["sag_t2_hr", "t2_oblik", "cor_t2_hr", "dwi", "t1_ip_op", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "fat_t2", "early_art", "late_portal"]},
+  29: {correct:["sag_t2_hr", "t2_oblik", "cor_t2_hr", "dwi", "t1_ip_op"], distractor:["ax_t2_haste", "ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "fat_t2", "late_art", "portal", "delayed"]},
+  30: {correct:["sag_t2_hr", "t2_oblik", "cor_t2_hr", "dwi", "t1_ip_op"], distractor:["ax_t2_haste", "ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_haste", "sag_t2_haste", "t1_pre", "fat_t2", "late_art", "portal", "delayed", "late_portal"]},
+  31: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "cine_ssfp"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "t1_ip_op", "fat_t2", "dwi", "late_art", "portal"]},
+  32: {correct:["ax_t2_hr", "sag_t2_hr", "cor_t2_hr", "dwi", "hi_b_dwi", "dce_t1"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "t1_ip_op"]},
+  33: {correct:["ax_t2_hr", "sag_t2_hr", "cor_t2_hr", "dwi", "hi_b_dwi"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "t1_ip_op", "dce_t1"]},
+  34: {correct:["ax_t2_hr", "sag_t2_hr", "cor_t2_hr", "dwi", "hi_b_dwi", "dce_t1"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "t1_ip_op"]},
+  35: {correct:["ax_t2_hr", "sag_t2_hr", "cor_t2_hr", "dwi", "hi_b_dwi", "dce_t1"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "t1_ip_op"]},
+  36: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_pre", "dwi"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_ip_op", "fat_t2", "t2_oblik"]},
+  37: {correct:["ax_t2", "cor_t2", "t1_ip_op", "mrcp", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2", "t1_pre", "early_art", "late_portal", "excretory", "mre"]},
+  38: {correct:["ax_t2_haste", "cor_t2_haste", "t1_ip_op", "mr_urog", "dwi"], distractor:["ax_t2", "ax_t2_hr", "cor_t2", "cor_t2_hr", "sag_t2_haste", "sag_t2", "t1_pre", "late_art", "portal", "delayed", "excretory"]},
+  39: {correct:["ax_t2", "cor_t2", "t1_ip_op", "mr_urog", "dwi", "late_art", "portal", "excretory"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2", "t1_pre", "mrcp", "early_art", "late_portal", "delayed"]},
+  40: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "early_art", "late_portal", "excretory", "mrcp", "mr_urog", "hi_b_dwi"]},
+  41: {correct:["ax_t2", "cor_t2", "t1_ip_op", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "early_art", "late_portal", "excretory", "hi_b_dwi"]},
+  42: {correct:["ax_t2", "cor_t2", "t1_ip_op", "mrcp", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "early_art", "late_portal", "excretory", "mre"]},
+  43: {correct:["ax_t2", "cor_t2", "t1_ip_op", "mrcp", "dwi"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2_hr", "sag_t2", "t1_pre", "late_art", "portal", "delayed", "early_art", "late_portal", "excretory"]},
+  44: {correct:["t1_pre", "ax_t2_hr", "cor_t2_hr", "sag_t2_hr", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_ip_op", "fat_t2", "early_art", "late_portal", "cine_ssfp"]},
+  45: {correct:["ax_t2", "t1_ip_op", "mre"], distractor:["ax_t2_haste", "ax_t2_hr", "cor_t2", "cor_t2_hr", "sag_t2", "t1_pre", "dwi", "late_art", "portal", "delayed", "mrcp"]},
+  46: {correct:["sag_t2_hr", "ax_t2_hr", "cor_t2_hr", "t1_ip_op", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_pre", "fat_t2", "early_art", "late_portal"]},
+  47: {correct:["ax_t2_haste", "sag_t2_haste", "cor_t2", "t1_pre", "dwi"], distractor:["ax_t2", "ax_t2_hr", "cor_t2_hr", "cor_t2_haste", "sag_t2_hr", "sag_t2", "t1_ip_op", "fat_t2", "late_art", "portal"]},
+  48: {correct:["t1_pre", "ax_t2_hr", "cor_t2_hr", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_hr", "sag_t2", "t1_ip_op", "fat_t2", "early_art", "late_portal"]},
+  49: {correct:["t1_pre", "ax_t2_hr", "cor_t2_hr", "sag_t2_hr", "dwi", "late_art", "portal", "delayed"], distractor:["ax_t2_haste", "ax_t2", "cor_t2", "cor_t2_haste", "sag_t2_haste", "sag_t2", "t1_ip_op", "fat_t2", "early_art", "late_portal", "excretory", "mr_urog"]},
+  50: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "swi", "mra"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "perfusion", "ce_t1_ax", "ce_t1_sag", "mrs", "mprage", "fmri"]},
+  51: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "swi", "mra"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mrv", "perfusion", "ce_t1_ax", "ce_t1_sag", "mrs", "mprage", "fmri"]},
+  52: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "swi", "ce_t1_ax", "ce_t1_sag"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mrv", "mra", "perfusion", "fat_ce_ax", "fat_ce_cor", "ce_flair", "mrs", "mprage"]},
+  53: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "mrv"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mra", "swi", "ce_t1_ax", "ce_t1_sag", "perfusion", "mrs", "mprage"]},
+  54: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_t1_sag", "mra"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mrv", "swi", "fat_ce_ax", "fat_ce_cor", "perfusion", "mrs", "mprage"]},
+  55: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "swi", "mra"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mrv", "perfusion", "ce_t1_ax", "mrs", "mprage", "fmri"]},
+  56: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_t1_sag"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "perfusion", "mrs", "ce_flair", "fmri"]},
+  57: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_t1_sag", "perfusion"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "mrs", "ce_flair", "fmri", "mprage"]},
+  58: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_t1_sag", "perfusion"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "mrs", "ce_flair", "fmri", "mprage"]},
+  59: {correct:["sag_t1", "cor_t1", "ax_t2", "cor_t2", "dyn_ce_sella", "fat_ce_cor", "fat_ce_sag"], distractor:["ax_t1", "ax_flair", "sag_t2", "sag_flair", "cor_flair", "mprage", "t1_spec", "dwi", "swi", "mra", "mrv", "ce_t1_ax", "ce_t1_sag", "perfusion"]},
+  60: {correct:["sag_t1", "ax_t1", "ax_t2", "cor_t2", "fat_ce_ax", "fat_ce_cor"], distractor:["cor_t1", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mra", "mrv", "ce_t1_ax", "ce_t1_sag", "dyn_ce_sella", "perfusion", "ciss"]},
+  61: {correct:["sag_t1", "ax_t1", "ax_t2", "cor_t2", "fat_t2_stir", "fat_ce_ax", "fat_ce_cor"], distractor:["cor_t1", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mra", "mrv", "ce_t1_ax", "dyn_ce_sella", "ciss", "perfusion", "fat_t2_stir_ax"]},
+  62: {correct:["sag_t1", "ax_t2", "ax_flair", "sag_flair", "dwi"], distractor:["ax_t1", "cor_t1", "cor_t2", "cor_flair", "sag_t2", "mprage", "swi", "mra", "mrv", "ce_t1_ax", "ce_t1_sag", "fat_ce_ax", "ce_flair", "perfusion", "mrs"]},
+  63: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "ce_t1_ax", "mprage", "perfusion", "mrs", "ce_flair", "fmri"]},
+  64: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "mprage", "ciss", "fmri"]},
+  65: {correct:["sag_t1", "mprage", "ax_t2", "ax_flair", "dwi"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "ce_t1_ax", "perfusion", "mrs", "ce_flair", "fmri"]},
+  66: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "ce_t1_ax", "perfusion", "mrs", "ce_flair", "fmri"]},
+  67: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "mprage", "perfusion", "mrs", "ce_flair", "fmri"]},
+  68: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "mprage", "perfusion", "mrs", "ce_flair", "fmri"]},
+  69: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "swi"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mra", "ce_t1_ax", "mprage", "perfusion", "mrs", "fmri"]},
+  70: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_t1_sag"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "fat_ce_ax", "mrs", "perfusion", "mprage"]},
+  71: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_t1_sag"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "fat_ce_ax", "mrs", "ce_flair", "perfusion", "mprage"]},
+  72: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ciss", "fat_ce_ax", "fat_ce_cor"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mrv", "ce_t1_ax", "ce_t1_sag", "ce_flair", "perfusion", "mrs"]},
+  73: {correct:["sag_t1", "ax_t1", "ax_t2", "cor_t2", "ciss", "fat_ce_ax", "fat_ce_cor"], distractor:["cor_t1", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mra", "mrv", "ce_t1_ax", "perfusion"]},
+  74: {correct:["sag_t1", "ax_t1", "ax_t2", "cor_t2", "ciss", "fat_ce_ax", "fat_ce_cor"], distractor:["cor_t1", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mra", "mrv", "ce_t1_ax", "dyn_ce_sella"]},
+  75: {correct:["sag_t1", "ax_t1", "ax_t2", "cor_t2", "ciss", "fat_ce_ax", "fat_ce_cor", "mra"], distractor:["cor_t1", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mrv", "ce_t1_ax", "perfusion", "mrs"]},
+  76: {correct:["sag_t1", "ax_t1", "fat_t2_stir_ax", "fat_t2_stir", "fat_ce_ax", "fat_ce_cor", "dwi"], distractor:["cor_t1", "ax_t2", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "swi", "ce_t1_ax", "ce_t1_cor", "ciss"]},
+  77: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "mra"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "ce_t1_ax", "mprage", "fmri"]},
+  78: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "mrv"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mra", "swi", "ce_t1_ax", "mprage"]},
+  79: {correct:["sag_t1", "ax_t1", "sag_t2", "ax_t2", "sp_fat_t2", "sp_sag_ce"], distractor:["sp_ax_ce", "sp_fat_ce", "ax_flair", "dwi", "cor_t2"]},
+  80: {correct:["sag_t1", "ax_t1", "sag_t2", "ax_t2"], distractor:["sp_fat_t2", "sp_sag_ce", "sp_ax_ce", "sp_fat_ce", "ax_flair", "cor_t2", "dwi"]},
+  81: {correct:["sag_t1", "sag_t2", "ax_t2", "sp_fat_t2", "sp_fat_ce"], distractor:["ax_t1", "sp_sag_ce", "sp_ax_ce", "ax_flair", "cor_t2", "dwi", "swi", "ce_t1_ax"]},
+  82: {correct:["sag_t1", "sag_t2", "ax_t2", "sp_fat_t2", "sp_fat_ce"], distractor:["ax_t1", "sp_sag_ce", "sp_ax_ce", "cor_t2", "ax_flair", "dwi"]},
+  83: {correct:["sag_t1", "sag_t2", "ax_t2", "sp_fat_t2"], distractor:["ax_t1", "sp_sag_ce", "sp_ax_ce", "sp_fat_ce", "ax_flair", "cor_t2", "dwi", "swi"]},
+  84: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ciss", "ce_t1_ax"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "fat_ce_ax", "fat_ce_cor", "mprage", "perfusion", "mrs"]},
+  85: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mra", "mrv", "fat_ce_ax", "fat_ce_cor", "ce_flair", "perfusion", "mrs"]},
+  86: {correct:["sag_t1", "ax_t1", "cor_t1", "ax_t2", "cor_t2", "fat_ce_cor", "fat_ce_sag"], distractor:["sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mra", "mrv", "dyn_ce_sella", "ce_t1_ax", "ce_t1_sag", "perfusion", "ciss"]},
+  87: {correct:["fat_t2_stir", "cor_t1", "ax_t1", "cor_t2", "fat_ce_ax", "fat_ce_cor"], distractor:["sag_t1", "ax_t2", "ax_flair", "sag_t2", "sag_flair", "cor_flair", "mprage", "dwi", "mrv", "ce_t1_ax", "ce_t1_sag", "dyn_ce_sella", "ciss"]},
+  88: {correct:["fat_t2_stir", "cor_t1", "ax_t1", "cor_t2", "fat_ce_ax", "fat_ce_cor"], distractor:["sag_t1", "ax_t2", "ax_flair", "sag_t2", "sag_flair", "cor_flair", "mprage", "dwi", "ce_t1_ax", "ce_t1_sag", "dyn_ce_sella", "ciss"]},
+  89: {correct:["sag_t1", "ax_t1", "ax_t2", "cor_t2", "ciss"], distractor:["cor_t1", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "mra", "fat_ce_ax", "fat_ce_cor", "dyn_ce_sella", "perfusion", "t1_spec"]},
+  90: {correct:["sag_t1", "ax_t1", "fat_t2_stir_ax", "fat_ce_ax", "fat_ce_cor", "ciss"], distractor:["cor_t1", "ax_t2", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mrv", "ce_t1_ax", "dyn_ce_sella", "perfusion"]},
+  91: {correct:["sag_t1", "ax_t1", "fat_t2_stir_ax", "fat_ce_ax", "fat_ce_cor", "ciss"], distractor:["cor_t1", "ax_t2", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mra", "ce_t1_ax", "dyn_ce_sella"]},
+  92: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "swi", "sp_ax_ce"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "mrv", "fat_ce_ax", "ce_flair", "perfusion", "mrs", "mprage"]},
+  93: {correct:["sag_t1", "ax_t2", "ax_flair", "dwi", "ce_t1_ax", "ce_flair"], distractor:["ax_t1", "cor_t1", "cor_t2", "sag_t2", "sag_flair", "cor_flair", "swi", "mrv", "fat_ce_ax", "fat_ce_cor", "ce_t1_sag", "perfusion", "mrs"]},
+  94: {correct:["ciss", "ax_t1", "ax_t2"], distractor:["sag_t1", "cor_t1", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mrv", "ce_t1_ax", "perfusion"]},
+  95: {correct:["sag_t1", "ax_t1", "fat_t2_stir_ax", "fat_t2_stir", "fat_ce_ax", "fat_ce_cor"], distractor:["cor_t1", "ax_t2", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mrv", "ce_t1_ax", "dyn_ce_sella", "ciss"]},
+  96: {correct:["sag_t1", "ax_t1", "cor_t1", "ax_t2", "cor_t2", "fat_ce_cor", "fat_ce_sag"], distractor:["sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mrv", "dyn_ce_sella", "ce_t1_ax", "ce_t1_sag", "t1_spec", "ciss"]},
+  97: {correct:["sag_t1", "sag_t2", "ax_t2"], distractor:["ax_t1", "sp_fat_t2", "sp_sag_ce", "sp_ax_ce", "sp_fat_ce", "cor_t2", "ax_flair", "dwi", "mprage"]},
+  98: {correct:["sag_t1", "ax_t1", "fat_t2_stir_ax", "fat_t2_stir", "fat_ce_ax", "fat_ce_cor"], distractor:["cor_t1", "ax_t2", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "dwi", "swi", "mrv", "ce_t1_ax", "dyn_ce_sella", "ciss"]},
+  99: {correct:["sag_t1", "ax_t1", "fat_t2_stir_ax", "fat_t2_stir", "dwi"], distractor:["cor_t1", "ax_t2", "cor_t2", "sag_t2", "ax_flair", "sag_flair", "cor_flair", "mprage", "fat_ce_ax", "fat_ce_cor", "dyn_ce_sella", "ciss"]},
+};
+
+
+var MODULES=[
+  {id:'abd1',label:'Abdomen I',domain:'Abdomen',caseIds:Array.from({length:25},function(_,i){return i}),tag:'tag-abd',color:'abd'},
+  {id:'abd2',label:'Abdomen II',domain:'Abdomen',caseIds:Array.from({length:25},function(_,i){return i+25}),tag:'tag-abd',color:'abd'},
+  {id:'neu1',label:'Neuro I',domain:'Neuroradiology',caseIds:Array.from({length:25},function(_,i){return i+50}),tag:'tag-neuro',color:'neuro'},
+  {id:'neu2',label:'Neuro II',domain:'Neuroradiology',caseIds:Array.from({length:25},function(_,i){return i+75}),tag:'tag-neuro',color:'neuro'},
+];
+var ABD_SEQS={"Morphological T2-Weighted":[{id:'ax_t2_haste',l:'Axial T2-Weighted (SS-FSE / HASTE)'},{id:'ax_t2',l:'Axial T2-Weighted'},{id:'ax_t2_hr',l:'Axial T2-Weighted High-Resolution'},{id:'cor_t2',l:'Coronal T2-Weighted'},{id:'cor_t2_hr',l:'Coronal T2-Weighted High-Resolution'},{id:'cor_t2_haste',l:'Coronal T2-Weighted (SS-FSE / HASTE)'},{id:'sag_t2',l:'Sagittal T2-Weighted'},{id:'sag_t2_hr',l:'Sagittal T2-Weighted High-Resolution'},{id:'sag_t2_haste',l:'Sagittal T2-Weighted (SS-FSE / HASTE)'},{id:'fat_t2',l:'Fat-Suppressed T2-Weighted (Axial/Coronal)'},{id:'t2_lfov',l:'T2-Weighted Large FOV (Abdomen/Pelvis Survey)'},{id:'t2_oblik',l:'Oblique T2-Weighted (Perpendicular/Parallel to Organ Axis)'}],"Morphological T1-Weighted":[{id:'t1_pre',l:'Axial T1-Weighted Pre-Contrast'},{id:'t1_ip_op',l:'Axial T1-Weighted In-Phase / Opposed-Phase (Chemical Shift)'}],"Functional & Advanced":[{id:'dwi',l:'Diffusion-Weighted Imaging (DWI) + ADC Map'},{id:'hi_b_dwi',l:'High b-Value DWI (>=1400)'},{id:'mre',l:'MR Elastography'},{id:'cine_ssfp',l:'Dynamic Cine SSFP (Defecography)'}],"Contrast-Enhanced Dynamic Phases":[{id:'dce_t1',l:'Dynamic Contrast-Enhanced (DCE) T1-Weighted'},{id:'late_art',l:'Late Arterial Phase (~35-45 s)'},{id:'early_art',l:'Early Arterial Phase (~15-20 s)'},{id:'portal',l:'Portal Venous Phase (~70-90 s)'},{id:'delayed',l:'Delayed Phase (2-5 min)'},{id:'late_portal',l:'Late Venous Phase (~90-120 s)'},{id:'excretory',l:'Excretory Phase (>10 min)'}],"Specific / Angiography":[{id:'mrcp',l:'Heavily T2-Weighted MRCP (Thick Slab / Thin Slice)'},{id:'mr_urog',l:'MR Urography (Thick Slab / Thin Slice)'},{id:'secretin',l:'Secretin-Enhanced MRCP'},{id:'nc_mra',l:'Non-Contrast MRA (TOF / SSFP)'},{id:'ce_mra',l:'3D Contrast-Enhanced MRA'},{id:'time_mra',l:'Time-Resolved MRA (TWIST / TRICKS / 4D-TRAK)'}]};
+var NEURO_SEQS={"Standard Cranial T1/T2/FLAIR":[{id:'sag_t1',l:'Sagittal T1-Weighted'},{id:'ax_t1',l:'Axial T1-Weighted'},{id:'cor_t1',l:'Coronal T1-Weighted'},{id:'sag_t2',l:'Sagittal T2-Weighted'},{id:'ax_t2',l:'Axial T2-Weighted'},{id:'cor_t2',l:'Coronal T2-Weighted'},{id:'sag_flair',l:'Sagittal T2-FLAIR'},{id:'ax_flair',l:'Axial T2-FLAIR'},{id:'cor_flair',l:'Coronal T2-FLAIR'},{id:'mprage',l:'3D Volumetric T1 (MPRAGE / MP2RAGE)'}],"Specific / High-Resolution":[{id:'ciss',l:'Thin-Section 3D Heavily T2 (CISS / FIESTA / SPACE)'},{id:'fat_t2_stir',l:'Coronal Fat-Suppressed T2 / STIR'},{id:'fat_t2_stir_ax',l:'Axial Fat-Suppressed T2 / STIR'},{id:'t1_spec',l:'T1-Weighted Coronal/Axial - Sella / Orbit Specific'}],"Functional & Vascular":[{id:'dwi',l:'Diffusion-Weighted Imaging (DWI) + ADC Map'},{id:'swi',l:'Susceptibility-Weighted Imaging (SWI / T2* GRE)'},{id:'perfusion',l:'MR Perfusion (DSC or DCE)'},{id:'mrs',l:'MR Spectroscopy (MRS)'},{id:'mra',l:'MR Angiography (MRA) - Intracranial / TOF'},{id:'mrv',l:'MR Venography (MRV)'},{id:'fmri',l:'Functional MRI (fMRI)'}],"Contrast-Enhanced Cranial":[{id:'ce_t1_ax',l:'Contrast-Enhanced T1 (Axial)'},{id:'ce_t1_cor',l:'Contrast-Enhanced T1 (Coronal)'},{id:'ce_t1_sag',l:'Contrast-Enhanced T1 (Sagittal)'},{id:'fat_ce_ax',l:'Fat-Suppressed CE-T1 (Axial)'},{id:'fat_ce_cor',l:'Fat-Suppressed CE-T1 (Coronal)'},{id:'fat_ce_sag',l:'Fat-Suppressed CE-T1 (Sagittal)'},{id:'dyn_ce_sella',l:'Dynamic CE Coronal T1 - Sella'},{id:'ce_flair',l:'Contrast-Enhanced T2-FLAIR'}],"Spinal":[{id:'sp_sag_t1',l:'Sagittal T1-Weighted (Spinal)'},{id:'sp_ax_t1',l:'Axial T1-Weighted (Spinal)'},{id:'sp_sag_t2',l:'Sagittal T2-Weighted (Spinal)'},{id:'sp_ax_t2',l:'Axial T2-Weighted (Spinal)'},{id:'sp_fat_t2',l:'Sagittal/Axial Fat-Suppressed T2 / STIR (Spinal)'},{id:'sp_sag_ce',l:'Sagittal CE-T1 (Spinal)'},{id:'sp_ax_ce',l:'Axial CE-T1 (Spinal)'},{id:'sp_fat_ce',l:'Fat-Suppressed CE-T1 (Spinal)'}]};
+var ABD_ALL=Object.values(ABD_SEQS).flat();
+var NEURO_ALL=Object.values(NEURO_SEQS).flat();
+var currentUser=null,currentModule=null,currentCaseIdx=0,timerInterval=null,sessionSeconds=0,caseStartTime=null;
+function startCaseTiming(){caseStartTime=Date.now();}
+function stopCaseTiming(caseId){
+  if(caseStartTime===null)return;
+  var elapsed=Math.round((Date.now()-caseStartTime)/1000);
+  caseStartTime=null;
+  var ud=getUserData();
+  if(!ud.caseTimes)ud.caseTimes={};
+  ud.caseTimes[caseId]=(ud.caseTimes[caseId]||0)+elapsed;
+  saveUserData(ud);
+}
+function fmtTime(s){if(!s||s===0)return '00:00';var m=Math.floor(s/60),sec=s%60;return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');}
+function getStore(){try{return JSON.parse(localStorage.getItem('mri_assess_v3')||'{}');}catch(e){return {};}}
+function setStore(d){localStorage.setItem('mri_assess_v3',JSON.stringify(d));}
+function getUserData(){var s=getStore();if(!s[currentUser])s[currentUser]={answers:{},moduleSeconds:{},lastModule:null,lastCase:0};return s[currentUser];}
+function saveUserData(ud){var s=getStore();s[currentUser]=ud;setStore(s);}
+function showLogin(){document.getElementById('intro-screen').classList.add('fade-out');setTimeout(function(){document.getElementById('intro-screen').style.display='none';document.getElementById('login-screen').classList.add('show');renderExistingUsers();document.getElementById('nickname-input').focus();},600);}
+function renderExistingUsers(){
+  var s=getStore(),users=Object.keys(s),wrap=document.getElementById('existing-users');
+  if(!users.length){wrap.innerHTML='';return;}
+  wrap.innerHTML='<div class="existing-users-label">Continue as:</div>';
+  var cw=document.createElement('div');cw.style.cssText='display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-bottom:4px;';
+  users.forEach(function(u){
+    var ud=s[u],answered=Object.keys(ud.answers||{}).length;
+    var chip=document.createElement('div');chip.className='user-chip';
+    var ns=document.createElement('span');ns.textContent=u;ns.style.cursor='pointer';ns.onclick=function(){document.getElementById('nickname-input').value=u;doLogin();};
+    var ps=document.createElement('span');ps.className='user-chip-progress';ps.textContent=answered+'/100';ps.style.cursor='pointer';ps.onclick=ns.onclick;
+    var del=document.createElement('span');del.className='user-chip-del';del.innerHTML='&#10005;';del.title='Delete user';
+    del.onclick=function(e){e.stopPropagation();if(confirm('Delete user "'+u+'" and all progress?')){var st=getStore();delete st[u];setStore(st);renderExistingUsers();}};
+    chip.appendChild(ns);chip.appendChild(ps);chip.appendChild(del);cw.appendChild(chip);
+  });
+  wrap.appendChild(cw);
+}
+function doLogin(){var name=document.getElementById('nickname-input').value.trim();if(!name)return;currentUser=name;document.getElementById('login-screen').classList.remove('show');showModuleScreen();}
+function showModuleScreen(){
+  document.getElementById('module-screen').classList.add('show');
+  document.getElementById('test-header').classList.remove('show');
+  document.getElementById('test-body').classList.remove('show');
+  document.getElementById('bottom-nav').classList.remove('show');
+  stopTimer();
+  var ud=getUserData();
+  document.getElementById('user-greeting').textContent=currentUser;
+  var grid=document.getElementById('module-grid');grid.innerHTML='';
+  var allDone=true;
+  MODULES.forEach(function(mod){
+    var answered=mod.caseIds.filter(function(id){return ud.answers[id]!==undefined;}).length;
+    var total=mod.caseIds.length,pct=Math.round(answered/total*100);
+    var done=answered===total,inProg=answered>0&&!done;
+    if(!done)allDone=false;
+    var card=document.createElement('div');
+    card.className='module-card'+(done?' completed':'')+(inProg?' in-progress':'');
+    card.innerHTML='<span class="module-tag '+mod.tag+'">'+mod.domain+'</span><h3>'+mod.label+'</h3><p>Cases '+(mod.caseIds[0]+1)+' - '+(mod.caseIds[mod.caseIds.length-1]+1)+'</p><div class="module-meta"><span class="module-cases">'+answered+'/'+total+'</span><span class="module-status-badge '+(done?'badge-done':inProg?'badge-progress':'badge-new')+'">'+(done?'Done':inProg?'In Progress':'New')+'</span></div><div class="module-progress-bar"><div class="module-progress-fill '+(done?'progress-done':'progress-'+mod.color)+'" style="width:'+pct+'%"></div></div>';
+    card.onclick=function(){startModule(mod.id);};
+    grid.appendChild(card);
+  });
+  document.getElementById('finish-wrap').style.display=allDone?'block':'none';
+}
+function startModule(modId){
+  currentModule=MODULES.find(function(m){return m.id===modId;});
+  var ud=getUserData(),startIdx=0;
+  for(var i=0;i<currentModule.caseIds.length;i++){if(ud.answers[currentModule.caseIds[i]]===undefined){startIdx=i;break;}}
+  currentCaseIdx=startIdx;ud.lastModule=modId;ud.lastCase=currentCaseIdx;saveUserData(ud);
+  document.getElementById('module-screen').classList.remove('show');
+  document.getElementById('test-header').classList.add('show');
+  document.getElementById('test-body').classList.add('show');
+  document.getElementById('bottom-nav').classList.add('show');
+  sessionSeconds=ud.moduleSeconds[modId]||0;startTimer();renderCase();
+}
+function renderCase(){
+  var caseId=currentModule.caseIds[currentCaseIdx],c=ALL_CASES[caseId],ud=getUserData(),seqMap=CASE_SEQ_MAP[caseId];
+  document.getElementById('hdr-module').textContent=currentModule.label;
+  document.getElementById('hdr-case').textContent='Case '+(caseId+1);
+  document.getElementById('case-num').textContent='Case '+(caseId+1)+' | '+currentModule.domain;
+  document.getElementById('case-sub').textContent=c.subcategory;
+  document.getElementById('case-desc').textContent=c.case;
+  var domain=c.domain,seqDef=domain==='Abdomen'?ABD_SEQS:NEURO_SEQS;
+  var allSeqIds=new Set([].concat(seqMap.correct,seqMap.distractor));
+  var savedAnswer=ud.answers[caseId]||[];
+  var container=document.getElementById('seq-options');container.innerHTML='';
+  Object.entries(seqDef).forEach(function(entry){
+    var catName=entry[0],catSeqs=entry[1];
+    var relevant=catSeqs.filter(function(s){return allSeqIds.has(s.id);});
+    if(!relevant.length)return;
+    var shuffled=relevant.slice().sort(function(){return Math.random()-.5;});
+    var catDiv=document.createElement('div');catDiv.className='seq-category';
+    catDiv.innerHTML='<div class="seq-cat-title">'+catName+'</div>';
+    shuffled.forEach(function(seq){
+      var opt=document.createElement('div'),selected=savedAnswer.includes(seq.id);
+      opt.className='seq-option'+(selected?' selected':'');
+      opt.innerHTML='<div class="seq-check"></div><span class="seq-label">'+seq.l+'</span>';
+      opt.onclick=function(){opt.classList.toggle('selected');saveCurrentSelections(caseId);};
+      opt.dataset.seqId=seq.id;catDiv.appendChild(opt);
+    });
+    container.appendChild(catDiv);
+  });
+  document.getElementById('btn-prev').disabled=currentCaseIdx===0;
+  var isLast=currentCaseIdx===currentModule.caseIds.length-1;
+  var btnNext=document.getElementById('btn-next');
+  btnNext.textContent=isLast?'Finish Module':'Next \u2192';
+  btnNext.className='nav-btn '+(isLast?'nav-finish':'nav-next');
+  document.getElementById('nav-progress').textContent=(currentCaseIdx+1)+' / '+currentModule.caseIds.length;
+  startCaseTiming();
+}
+function saveCurrentSelections(caseId){
+  var opts=document.querySelectorAll('#seq-options .seq-option.selected');
+  var selected=Array.from(opts).map(function(o){return o.dataset.seqId;});
+  var ud=getUserData();ud.answers[caseId]=selected;ud.lastCase=currentCaseIdx;saveUserData(ud);
+}
+function prevCase(){if(currentCaseIdx>0){stopCaseTiming(currentModule.caseIds[currentCaseIdx]);currentCaseIdx--;renderCase();window.scrollTo(0,0);}}
+function nextCase(){
+  var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);
+  if(currentCaseIdx<currentModule.caseIds.length-1){currentCaseIdx++;renderCase();window.scrollTo(0,0);}
+  else{stopTimer();var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);
+    document.getElementById('complete-title').textContent=currentModule.label+' Complete!';
+    document.getElementById('complete-msg').textContent='You finished all '+currentModule.caseIds.length+' cases. Export your results or return to modules.';
+    document.getElementById('complete-overlay').classList.add('show');
+  }
+}
+function backToModules(){
+  if(currentModule){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);}
+  stopTimer();document.getElementById('complete-overlay').classList.remove('show');showModuleScreen();
+}
+function closeComplete(){document.getElementById('complete-overlay').classList.remove('show');backToModules();}
+function takeBreak(){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);stopTimer();document.getElementById('break-overlay').classList.add('show');}
+function resumeFromBreak(){document.getElementById('break-overlay').classList.remove('show');startTimer();}
+function startTimer(){stopTimer();timerInterval=setInterval(function(){sessionSeconds++;var h=String(Math.floor(sessionSeconds/3600)).padStart(2,'0'),m=String(Math.floor((sessionSeconds%3600)/60)).padStart(2,'0'),s=String(sessionSeconds%60).padStart(2,'0');document.getElementById('hdr-timer').textContent=h+':'+m+':'+s;},1000);}
+function stopTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null;}}
+function buildExportRows(caseIds){
+  var ud=getUserData(),abdAll=Object.values(ABD_SEQS).flat(),neuroAll=Object.values(NEURO_SEQS).flat();
+  var ct=ud.caseTimes||{};
+  var rows=[['Username','Case No','Subcategory','Clinical Scenario','Selected Sequences','Time Spent (mm:ss)']];
+  var totalSec=0,count=0;
+  caseIds.forEach(function(i){var c=ALL_CASES[i],pool=c.domain==='Abdomen'?abdAll:neuroAll,idToLabel={};pool.forEach(function(s){idToLabel[s.id]=s.l;});
+    var sel=(ud.answers[i]||[]).map(function(id){return idToLabel[id]||id;}).join('; ');
+    var t=ct[i]||0;totalSec+=t;count++;
+    rows.push([currentUser,i+1,c.subcategory,c.case,sel,fmtTime(t)]);
+  });
+  rows.push(['','','','','Total',fmtTime(totalSec)]);
+  rows.push(['','','','','Average',fmtTime(count?Math.round(totalSec/count):0)]);
+  return rows;
+}
+function exportModuleResults(){var rows=buildExportRows(currentModule.caseIds);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,currentModule.label);XLSX.writeFile(wb,'MRI_'+currentModule.label.replace(/ /g,'_')+'_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
+function finishEvaluation(){var allIds=Array.from({length:100},function(_,i){return i;});var rows=buildExportRows(allIds);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'All Results');XLSX.writeFile(wb,'MRI_Assessment_ALL_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
+window.addEventListener('beforeunload',function(){if(currentModule&&currentUser){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);}});
+
+</script></body></html>
