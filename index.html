@@ -465,6 +465,8 @@ function nextCase(){
   var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);
   if(currentCaseIdx<currentModule.caseIds.length-1){currentCaseIdx++;renderCase();window.scrollTo(0,0);}
   else{stopTimer();var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);
+    // Auto-send to Google Sheets
+    var autoRows=buildExportRows(currentModule.caseIds);sendToSheets(currentModule.label,autoRows);
     document.getElementById('complete-title').textContent=currentModule.label+' Complete!';
     document.getElementById('complete-msg').textContent='You finished all '+currentModule.caseIds.length+' cases. Export your results or return to modules.';
     document.getElementById('complete-overlay').classList.add('show');
