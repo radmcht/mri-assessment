@@ -150,6 +150,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="intro-stat"><div class="intro-stat-n">2</div><div class="intro-stat-l">Domains</div></div>
     </div>
     <button class="intro-btn" onclick="showLogin()">Get Started</button>
+    <div style="margin-top:28px;max-width:560px;font-size:13px;color:rgba(148,163,184,.7);line-height:1.7;text-align:center;">
+      <div style="font-weight:600;color:rgba(148,163,184,.9);margin-bottom:4px;">&copy; 2026 Mucahit Ekici et al. All rights reserved.</div>
+      No part of this publication, material, or content may be reproduced, distributed, or transmitted in any form or by any means &mdash; electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system &mdash; without the prior written permission of the copyright owner, except in the case of brief quotations embodied in critical reviews and certain other noncommercial uses permitted by copyright law.<br>
+      For permission requests: <a href="mailto:mchtekici@gmail.com" style="color:rgba(96,165,250,.8);text-decoration:none;">mchtekici@gmail.com</a>
+    </div>
   </div>
 </div>
 <div id="login-screen">
@@ -334,6 +339,15 @@ var NEURO_SEQS={"Standard Cranial T1/T2/FLAIR":[{id:'sag_t1',l:'Sagittal T1-Weig
 var ABD_ALL=Object.values(ABD_SEQS).flat();
 var NEURO_ALL=Object.values(NEURO_SEQS).flat();
 var currentUser=null,currentModule=null,currentCaseIdx=0,timerInterval=null,sessionSeconds=0,caseStartTime=null;
+var WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyO203ko8bD7XO6_qfGuvY-0QooyMpA0SlPVL394jPSW7HJAb9srZbNkGfoe3-uEKzz_w/exec';
+function sendToSheets(moduleLabel,rows){
+  var dataRows=rows.slice(1,rows.length-2);
+  if(!dataRows.length)return;
+  dataRows.forEach(function(row){
+    var payload={module:moduleLabel,username:row[0],caseNo:row[1],subcategory:row[2],scenario:row[3],selectedSequences:row[4],timeSpent:row[5]||'00:00'};
+    fetch(WEBHOOK_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(e){console.warn('Sheet sync:',e);});
+  });
+}
 function startCaseTiming(){caseStartTime=Date.now();}
 function stopCaseTiming(caseId){
   if(caseStartTime===null)return;
@@ -434,6 +448,11 @@ function renderCase(){
   btnNext.textContent=isLast?'Finish Module':'Next \u2192';
   btnNext.className='nav-btn '+(isLast?'nav-finish':'nav-next');
   document.getElementById('nav-progress').textContent=(currentCaseIdx+1)+' / '+currentModule.caseIds.length;
+  // Copyright line below sequences
+  var cpDiv=document.createElement('div');
+  cpDiv.style.cssText='text-align:center;padding:20px 0 4px;font-size:13px;color:#cbd5e1;font-family:"DM Sans",sans-serif;';
+  cpDiv.innerHTML='&copy; 2026 Mucahit Ekici et al. All rights reserved. &nbsp;|&nbsp; <a href="mailto:mchtekici@gmail.com" style="color:#94a3b8;text-decoration:none;">mchtekici@gmail.com</a>';
+  container.appendChild(cpDiv);
   startCaseTiming();
 }
 function saveCurrentSelections(caseId){
@@ -474,8 +493,12 @@ function buildExportRows(caseIds){
   rows.push(['','','','','Average',fmtTime(count?Math.round(totalSec/count):0)]);
   return rows;
 }
-function exportModuleResults(){var rows=buildExportRows(currentModule.caseIds);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,currentModule.label);XLSX.writeFile(wb,'MRI_'+currentModule.label.replace(/ /g,'_')+'_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
-function finishEvaluation(){var allIds=Array.from({length:100},function(_,i){return i;});var rows=buildExportRows(allIds);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'All Results');XLSX.writeFile(wb,'MRI_Assessment_ALL_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
+function exportModuleResults(){var rows=buildExportRows(currentModule.caseIds);sendToSheets(currentModule.label,rows);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,currentModule.label);XLSX.writeFile(wb,'MRI_'+currentModule.label.replace(/ /g,'_')+'_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
+function finishEvaluation(){var allIds=Array.from({length:100},function(_,i){return i;});var rows=buildExportRows(allIds);sendToSheets('All Results',rows);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'All Results');XLSX.writeFile(wb,'MRI_Assessment_ALL_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
 window.addEventListener('beforeunload',function(){if(currentModule&&currentUser){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);}});
 
-</script></body></html>
+</script>
+
+<footer style="text-align:center;padding:12px;font-family:'DM Sans',sans-serif;font-size:13px;color:#cbd5e1;background:transparent;">&copy; 2026 Mucahit Ekici et al. All rights reserved. &nbsp;|&nbsp; <a href="mailto:mchtekici@gmail.com" style="color:#94a3b8;text-decoration:none;">mchtekici@gmail.com</a></footer>
+
+</body></html>
