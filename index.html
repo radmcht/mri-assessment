@@ -345,7 +345,7 @@ function sendToSheets(moduleLabel,rows){
   if(!dataRows.length)return;
   dataRows.forEach(function(row){
     var payload={module:moduleLabel,username:row[0],caseNo:row[1],subcategory:row[2],scenario:row[3],selectedSequences:row[4],timeSpent:row[5]||'00:00'};
-    fetch(WEBHOOK_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(e){console.warn('Sheet sync:',e);});
+    fetch(WEBHOOK_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)}).catch(function(e){console.warn('Sheet sync:',e);});
   });
 }
 function startCaseTiming(){caseStartTime=Date.now();}
