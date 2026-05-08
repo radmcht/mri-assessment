@@ -140,6 +140,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .complete-back{background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:12px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;}
 .complete-back:hover{border-color:var(--accent);color:var(--accent);}
 
+
+.admin-panel{background:#fff8f0;border:1px solid rgba(220,38,38,.15);border-radius:12px;padding:16px 20px;max-width:840px;width:100%;padding-left:24px;padding-right:24px;margin-bottom:8px;}
+.admin-panel h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--red);margin-bottom:12px;}
+.admin-user-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--surface3);}
+.admin-user-row:last-child{border-bottom:none;}
+.admin-user-info{font-size:13px;color:var(--text);}
+.admin-user-prog{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);margin-left:8px;}
+.admin-del-btn{background:var(--red-bg);color:var(--red);border:1px solid rgba(220,38,38,.2);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.admin-del-btn:hover{background:var(--red);color:#fff;}
+.admin-badge{background:#fee2e2;color:var(--red);border:1px solid rgba(220,38,38,.2);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;margin-left:6px;}
 </style></head><body>
 
 <div id="intro-screen">
@@ -184,6 +194,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
   <div class="pace-note"><strong>&#9200; Work at your own pace.</strong> No time limit. Take breaks anytime. Progress is auto-saved.</div>
   <div class="module-grid" id="module-grid"></div>
+  <div id="admin-panel" style="display:none;width:100%;max-width:840px;padding:0 24px;margin-bottom:16px;"></div>
   <div class="finish-wrap" id="finish-wrap" style="display:none">
     <button class="finish-btn" onclick="finishEvaluation()">&#10004; Finish Evaluation &amp; Export All Results</button>
   </div>
@@ -350,6 +361,7 @@ var NEURO_SEQS={"Standard Cranial T1/T2/FLAIR":[{id:'sag_t1',l:'Sagittal T1-Weig
 var ABD_ALL=Object.values(ABD_SEQS).flat();
 var NEURO_ALL=Object.values(NEURO_SEQS).flat();
 var currentUser=null,currentModule=null,currentCaseIdx=0,timerInterval=null,sessionSeconds=0,caseStartTime=null;
+var ADMIN_EMAIL='mchtekici@gmail.com', ADMIN_PIN='3808';
 var WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyO203ko8bD7XO6_qfGuvY-0QooyMpA0SlPVL394jPSW7HJAb9srZbNkGfoe3-uEKzz_w/exec';
 function sendToSheets(moduleLabel,rows){
   var dataRows=rows.slice(1,rows.length-2);
@@ -389,9 +401,7 @@ function renderExistingUsers(){
       document.getElementById('pin-input').focus();
     };
     var ps=document.createElement('span');ps.className='user-chip-progress';ps.textContent=answered+'/100';ps.style.cursor='pointer';ps.onclick=ns.onclick;
-    var del=document.createElement('span');del.className='user-chip-del';del.innerHTML='&#10005;';del.title='Delete user';
-    del.onclick=function(e){e.stopPropagation();if(confirm('Delete "'+u+'" and all progress?')){var st=getStore();delete st[u];setStore(st);renderExistingUsers();}};
-    chip.appendChild(ns);chip.appendChild(ps);chip.appendChild(del);cw.appendChild(chip);
+    chip.appendChild(ns);chip.appendChild(ps);cw.appendChild(chip);
   });
   wrap.appendChild(cw);
 }
@@ -405,10 +415,17 @@ function doLogin(){
   if(!/^\S+@\S+\.\S+$/.test(email)){err.textContent='Please enter a valid e-mail.';return;}
   if(!/^\d{4}$/.test(pin)){err.textContent='PIN must be exactly 4 digits.';return;}
   var s=getStore();
+  // Admin check
+  if(email===ADMIN_EMAIL&&pin!==ADMIN_PIN){err.textContent='Incorrect PIN. Please try again.';return;}
+  if(email===ADMIN_EMAIL&&pin===ADMIN_PIN){
+    currentUser=email;
+    document.getElementById('login-screen').classList.remove('show');
+    showModuleScreen();
+    return;
+  }
   if(s[email]&&s[email].pin){
     if(s[email].pin!==pin){err.textContent='Incorrect PIN. Please try again.';return;}
   }else{
-    // New user — register
     if(!s[email])s[email]={};
     s[email].pin=pin;
     if(!s[email].answers)s[email].answers={};
@@ -419,6 +436,23 @@ function doLogin(){
   currentUser=email;
   document.getElementById('login-screen').classList.remove('show');
   showModuleScreen();
+}
+
+function renderAdminPanel(ap){
+  var s=getStore();
+  var users=Object.keys(s).filter(function(k){return k!==ADMIN_EMAIL && s[k]&&s[k].pin;});
+  if(!users.length){ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management</h4><p style="font-size:13px;color:var(--text-muted);">No registered users yet.</p></div>';return;}
+  var rows=users.map(function(u){
+    var answered=Object.keys(s[u].answers||{}).length;
+    return '<div class="admin-user-row"><span class="admin-user-info">'+u+'<span class="admin-user-prog">'+answered+'/100</span></span>'
+      +'<button class="admin-del-btn" data-email="'+u+'" onclick="adminDeleteUser(this.dataset.email)">&#10005; Delete</button></div>';
+  }).join('');
+  ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management ('+users.length+' users)</h4>'+rows+'</div>';
+}
+function adminDeleteUser(email){
+  if(!confirm('Delete "'+email+'" and all their progress?'))return;
+  var s=getStore();delete s[email];setStore(s);
+  renderAdminPanel(document.getElementById('admin-panel'));
 }
 function showModuleScreen(){
   document.getElementById('module-screen').classList.add('show');
@@ -442,6 +476,15 @@ function showModuleScreen(){
     grid.appendChild(card);
   });
   document.getElementById('finish-wrap').style.display=allDone?'block':'none';
+  // Admin panel
+  var ap=document.getElementById('admin-panel');
+  if(currentUser===ADMIN_EMAIL){
+    document.getElementById('user-greeting').innerHTML=currentUser+' <span class="admin-badge">ADMIN</span>';
+    renderAdminPanel(ap);
+    ap.style.display='block';
+  }else{
+    ap.style.display='none';
+  }
 }
 function startModule(modId){
   currentModule=MODULES.find(function(m){return m.id===modId;});
