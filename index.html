@@ -54,6 +54,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .user-chip-del:hover{background:var(--red);border-color:var(--red);color:#fff;}
 .login-btn{background:var(--accent);color:#fff;border:none;padding:13px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;width:100%;box-shadow:0 2px 12px rgba(37,99,235,.2);}
 .login-btn:hover{background:var(--accent2);}
+.pin-wrap{position:relative;}
+.pin-wrap input{padding-right:44px;letter-spacing:6px;font-size:18px;}
+.pin-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);}
+.login-note{font-size:12px;color:var(--text-muted);text-align:center;margin-top:12px;line-height:1.5;}
+.login-error{font-size:13px;color:var(--red);text-align:center;margin-top:8px;min-height:18px;}
 
 #module-screen{display:none;}#module-screen.show{display:flex;flex-direction:column;align-items:center;min-height:100vh;}
 .module-hero{padding:60px 24px 32px;text-align:center;width:100%;}
@@ -159,11 +164,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </div>
 <div id="login-screen">
   <div class="login-card">
-    <h2>Welcome</h2>
-    <p>Enter a nickname to start. Your progress is saved locally.</p>
+    <h2>Sign In</h2>
+    <p>Enter your e-mail and 4-digit PIN to continue.</p>
     <div class="existing-users" id="existing-users"></div>
-    <div class="login-input-wrap"><input type="text" id="nickname-input" placeholder="Enter your nickname..." maxlength="30" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="login-input-wrap"><input type="email" id="email-input" placeholder="E-mail address..." onkeydown="if(event.key==='Enter')document.getElementById('pin-input').focus()"></div>
+    <div class="login-input-wrap pin-wrap">
+      <input type="password" id="pin-input" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" pattern="[0-9]*" onkeydown="if(event.key==='Enter')doLogin()">
+      <button type="button" class="pin-toggle" onclick="togglePin()">&#128065;</button>
+    </div>
     <button class="login-btn" onclick="doLogin()">Continue</button>
+    <div class="login-note">On your next visit, use the same e-mail and PIN to sign in.</div>
+    <div class="login-error" id="login-error"></div>
   </div>
 </div>
 <div id="module-screen">
@@ -344,7 +355,7 @@ function sendToSheets(moduleLabel,rows){
   var dataRows=rows.slice(1,rows.length-2);
   if(!dataRows.length)return;
   dataRows.forEach(function(row){
-    var payload={module:moduleLabel,username:row[0],caseNo:row[1],subcategory:row[2],scenario:row[3],selectedSequences:row[4],timeSpent:row[5]||'00:00'};
+    var sheetName=(row[0]+' - '+moduleLabel).substring(0,95);var payload={module:sheetName,username:row[0],caseNo:row[1],subcategory:row[2],scenario:row[3],selectedSequences:row[4],timeSpent:row[5]||'00:00'};
     var blob=new Blob([JSON.stringify(payload)],{type:'text/plain'});navigator.sendBeacon(WEBHOOK_URL,blob);
   });
 }
@@ -361,26 +372,54 @@ function stopCaseTiming(caseId){
 function fmtTime(s){if(!s||s===0)return '00:00';var m=Math.floor(s/60),sec=s%60;return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');}
 function getStore(){try{return JSON.parse(localStorage.getItem('mri_assess_v3')||'{}');}catch(e){return {};}}
 function setStore(d){localStorage.setItem('mri_assess_v3',JSON.stringify(d));}
-function getUserData(){var s=getStore();if(!s[currentUser])s[currentUser]={answers:{},moduleSeconds:{},lastModule:null,lastCase:0};return s[currentUser];}
+function getUserData(){var s=getStore();if(!s[currentUser])s[currentUser]={pin:'',answers:{},moduleSeconds:{},lastModule:null,lastCase:0,caseTimes:{}};var ud=s[currentUser];if(!ud.answers)ud.answers={};if(!ud.moduleSeconds)ud.moduleSeconds={};if(!ud.caseTimes)ud.caseTimes={};return ud;}
 function saveUserData(ud){var s=getStore();s[currentUser]=ud;setStore(s);}
-function showLogin(){document.getElementById('intro-screen').classList.add('fade-out');setTimeout(function(){document.getElementById('intro-screen').style.display='none';document.getElementById('login-screen').classList.add('show');renderExistingUsers();document.getElementById('nickname-input').focus();},600);}
+function showLogin(){document.getElementById('intro-screen').classList.add('fade-out');setTimeout(function(){document.getElementById('intro-screen').style.display='none';document.getElementById('login-screen').classList.add('show');renderExistingUsers();document.getElementById('email-input').focus();},600);}
 function renderExistingUsers(){
-  var s=getStore(),users=Object.keys(s),wrap=document.getElementById('existing-users');
+  var s=getStore(),users=Object.keys(s).filter(function(k){return s[k]&&s[k].pin;}),wrap=document.getElementById('existing-users');
   if(!users.length){wrap.innerHTML='';return;}
-  wrap.innerHTML='<div class="existing-users-label">Continue as:</div>';
+  wrap.innerHTML='<div class="existing-users-label">Previous accounts:</div>';
   var cw=document.createElement('div');cw.style.cssText='display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-bottom:4px;';
   users.forEach(function(u){
     var ud=s[u],answered=Object.keys(ud.answers||{}).length;
     var chip=document.createElement('div');chip.className='user-chip';
-    var ns=document.createElement('span');ns.textContent=u;ns.style.cursor='pointer';ns.onclick=function(){document.getElementById('nickname-input').value=u;doLogin();};
+    var ns=document.createElement('span');ns.textContent=u;ns.style.cursor='pointer';
+    ns.onclick=function(){
+      document.getElementById('email-input').value=u;
+      document.getElementById('pin-input').focus();
+    };
     var ps=document.createElement('span');ps.className='user-chip-progress';ps.textContent=answered+'/100';ps.style.cursor='pointer';ps.onclick=ns.onclick;
     var del=document.createElement('span');del.className='user-chip-del';del.innerHTML='&#10005;';del.title='Delete user';
-    del.onclick=function(e){e.stopPropagation();if(confirm('Delete user "'+u+'" and all progress?')){var st=getStore();delete st[u];setStore(st);renderExistingUsers();}};
+    del.onclick=function(e){e.stopPropagation();if(confirm('Delete "'+u+'" and all progress?')){var st=getStore();delete st[u];setStore(st);renderExistingUsers();}};
     chip.appendChild(ns);chip.appendChild(ps);chip.appendChild(del);cw.appendChild(chip);
   });
   wrap.appendChild(cw);
 }
-function doLogin(){var name=document.getElementById('nickname-input').value.trim();if(!name)return;currentUser=name;document.getElementById('login-screen').classList.remove('show');showModuleScreen();}
+function togglePin(){var i=document.getElementById('pin-input');i.type=i.type==='password'?'text':'password';}
+function doLogin(){
+  var email=document.getElementById('email-input').value.trim().toLowerCase();
+  var pin=document.getElementById('pin-input').value.trim();
+  var err=document.getElementById('login-error');
+  err.textContent='';
+  if(!email){err.textContent='Please enter your e-mail.';return;}
+  if(!/^\S+@\S+\.\S+$/.test(email)){err.textContent='Please enter a valid e-mail.';return;}
+  if(!/^\d{4}$/.test(pin)){err.textContent='PIN must be exactly 4 digits.';return;}
+  var s=getStore();
+  if(s[email]&&s[email].pin){
+    if(s[email].pin!==pin){err.textContent='Incorrect PIN. Please try again.';return;}
+  }else{
+    // New user — register
+    if(!s[email])s[email]={};
+    s[email].pin=pin;
+    if(!s[email].answers)s[email].answers={};
+    if(!s[email].moduleSeconds)s[email].moduleSeconds={};
+    if(!s[email].caseTimes)s[email].caseTimes={};
+    setStore(s);
+  }
+  currentUser=email;
+  document.getElementById('login-screen').classList.remove('show');
+  showModuleScreen();
+}
 function showModuleScreen(){
   document.getElementById('module-screen').classList.add('show');
   document.getElementById('test-header').classList.remove('show');
