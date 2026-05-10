@@ -402,9 +402,6 @@ async function renderExistingUsers(){
   try{
     var r=await supa.from('users').select('email').neq('email',ADMIN_EMAIL).order('created_at',{ascending:true});
     var users=(r.data||[]).map(function(x){return x.email;});
-    // Also merge localStorage users not yet in Supabase
-    var s=getStore();
-    Object.keys(s).forEach(function(k){if(k!==ADMIN_EMAIL&&s[k]&&s[k].pin&&users.indexOf(k)===-1)users.push(k);});
     if(!users.length){wrap.innerHTML='';return;}
     wrap.innerHTML='<div class="existing-users-label">Previous accounts:</div>';
     var cw=document.createElement('div');cw.style.cssText='display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-bottom:4px;';
@@ -464,16 +461,23 @@ async function doLogin(){
   btn.textContent='Continue';btn.disabled=false;
 }
 
-function renderAdminPanel(ap){
-  var s=getStore();
-  var users=Object.keys(s).filter(function(k){return k!==ADMIN_EMAIL && s[k]&&s[k].pin;});
-  if(!users.length){ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management</h4><p style="font-size:13px;color:var(--text-muted);">No registered users yet.</p></div>';return;}
-  var rows=users.map(function(u){
-    var answered=Object.keys(s[u].answers||{}).length;
-    return '<div class="admin-user-row"><span class="admin-user-info">'+u+'<span class="admin-user-prog">'+answered+'/100</span></span>'
-      +'<button class="admin-del-btn" data-email="'+u+'" onclick="adminDeleteUser(this.dataset.email)">&#10005; Delete</button></div>';
-  }).join('');
-  ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management ('+users.length+' users)</h4>'+rows+'</div>';
+async function renderAdminPanel(ap){
+  ap.innerHTML='<div class="admin-panel"><p style="font-size:12px;color:var(--text-muted);">Loading users...</p></div>';
+  try{
+    var r=await supa.from('users').select('email').neq('email',ADMIN_EMAIL).order('created_at',{ascending:true});
+    var users=(r.data||[]).map(function(x){return x.email;});
+    if(!users.length){ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management</h4><p style="font-size:13px;color:var(--text-muted);">No registered users yet.</p></div>';return;}
+    var rows=users.map(function(u){
+      // Get answer count from localStorage if available, else show —
+      var s=getStore();
+      var answered=s[u]&&s[u].answers?Object.keys(s[u].answers).length:'?';
+      return '<div class="admin-user-row"><span class="admin-user-info">'+u+'<span class="admin-user-prog">'+answered+'/100</span></span>'
+        +'<button class="admin-del-btn" data-email="'+u+'" onclick="adminDeleteUser(this.dataset.email)">&#10005; Delete</button></div>';
+    }).join('');
+    ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management ('+users.length+' users)</h4>'+rows+'</div>';
+  }catch(e){
+    ap.innerHTML='<div class="admin-panel"><p style="font-size:12px;color:var(--red);">Could not load users.</p></div>';
+  }
 }
 async function adminDeleteUser(email){
   if(!confirm('Delete "'+email+'" and all their progress?'))return;
