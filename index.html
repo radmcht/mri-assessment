@@ -396,23 +396,28 @@ function setStore(d){localStorage.setItem('mri_assess_v3',JSON.stringify(d));}
 function getUserData(){var s=getStore();if(!s[currentUser])s[currentUser]={pin:'',answers:{},moduleSeconds:{},lastModule:null,lastCase:0,caseTimes:{}};var ud=s[currentUser];if(!ud.answers)ud.answers={};if(!ud.moduleSeconds)ud.moduleSeconds={};if(!ud.caseTimes)ud.caseTimes={};return ud;}
 function saveUserData(ud){var s=getStore();s[currentUser]=ud;setStore(s);}
 function showLogin(){document.getElementById('intro-screen').classList.add('fade-out');setTimeout(function(){document.getElementById('intro-screen').style.display='none';document.getElementById('login-screen').classList.add('show');renderExistingUsers();document.getElementById('email-input').focus();},600);}
-function renderExistingUsers(){
-  var s=getStore(),users=Object.keys(s).filter(function(k){return s[k]&&s[k].pin;}),wrap=document.getElementById('existing-users');
-  if(!users.length){wrap.innerHTML='';return;}
-  wrap.innerHTML='<div class="existing-users-label">Previous accounts:</div>';
-  var cw=document.createElement('div');cw.style.cssText='display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-bottom:4px;';
-  users.forEach(function(u){
-    var ud=s[u],answered=Object.keys(ud.answers||{}).length;
-    var chip=document.createElement('div');chip.className='user-chip';
-    var ns=document.createElement('span');ns.textContent=u;ns.style.cursor='pointer';
-    ns.onclick=function(){
-      document.getElementById('email-input').value=u;
-      document.getElementById('pin-input').focus();
-    };
-    var ps=document.createElement('span');ps.className='user-chip-progress';ps.textContent=answered+'/100';ps.style.cursor='pointer';ps.onclick=ns.onclick;
-    chip.appendChild(ns);chip.appendChild(ps);cw.appendChild(chip);
-  });
-  wrap.appendChild(cw);
+async function renderExistingUsers(){
+  var wrap=document.getElementById('existing-users');
+  wrap.innerHTML='<div style="font-size:12px;color:var(--text-muted);">Loading accounts...</div>';
+  try{
+    var r=await supa.from('users').select('email').neq('email',ADMIN_EMAIL).order('created_at',{ascending:true});
+    var users=(r.data||[]).map(function(x){return x.email;});
+    // Also merge localStorage users not yet in Supabase
+    var s=getStore();
+    Object.keys(s).forEach(function(k){if(k!==ADMIN_EMAIL&&s[k]&&s[k].pin&&users.indexOf(k)===-1)users.push(k);});
+    if(!users.length){wrap.innerHTML='';return;}
+    wrap.innerHTML='<div class="existing-users-label">Previous accounts:</div>';
+    var cw=document.createElement('div');cw.style.cssText='display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-bottom:4px;';
+    users.forEach(function(u){
+      var chip=document.createElement('div');chip.className='user-chip';
+      var ns=document.createElement('span');ns.textContent=u;ns.style.cursor='pointer';
+      ns.onclick=function(){document.getElementById('email-input').value=u;document.getElementById('pin-input').focus();};
+      chip.appendChild(ns);cw.appendChild(chip);
+    });
+    wrap.appendChild(cw);
+  }catch(e){
+    wrap.innerHTML='';
+  }
 }
 function togglePin(){var i=document.getElementById('pin-input');i.type=i.type==='password'?'text':'password';}
 async function doLogin(){
