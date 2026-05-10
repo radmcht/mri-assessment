@@ -50,9 +50,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .existing-users{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
 .user-chip{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;}
 .user-chip:hover{border-color:var(--accent);color:var(--accent);}
-.user-chip-progress{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);}
-.user-chip-del{width:18px;height:18px;border-radius:50%;background:transparent;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);cursor:pointer;transition:all .15s;margin-left:2px;flex-shrink:0;line-height:1;}
-.user-chip-del:hover{background:var(--red);border-color:var(--red);color:#fff;}
 .login-btn{background:var(--accent);color:#fff;border:none;padding:13px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;width:100%;box-shadow:0 2px 12px rgba(37,99,235,.2);}
 .login-btn:hover{background:var(--accent2);}
 .pin-wrap{position:relative;}
@@ -186,6 +183,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="login-btn" onclick="doLogin()">Continue</button>
     <div class="login-note">On your next visit, use the same e-mail and PIN to sign in.</div>
     <div class="login-error" id="login-error"></div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--surface3);font-size:12px;color:var(--text-muted);text-align:center;line-height:1.6;">&copy; 2026 Mucahit Ekici et al. All rights reserved.<br>For permission requests: <a href="mailto:mchtekici@gmail.com" style="color:var(--accent);text-decoration:none;">mchtekici@gmail.com</a></div>
   </div>
 </div>
 <div id="module-screen">
@@ -579,7 +577,7 @@ function saveCurrentSelections(caseId){
   var ud=getUserData();ud.answers[caseId]=selected;ud.lastCase=currentCaseIdx;saveUserData(ud);
   if(currentUser&&currentUser!==ADMIN_EMAIL){var t=(ud.caseTimes&&ud.caseTimes[caseId])||0;sbUpsertAnswer(currentUser,caseId,selected,t).catch(function(e){console.warn('SB:',e);});}
 }
-function prevCase(){if(currentCaseIdx>0){stopCaseTiming(currentModule.caseIds[currentCaseIdx]);currentCaseIdx--;renderCase();window.scrollTo(0,0);}}
+function prevCase(){if(currentCaseIdx>0){var cid=currentModule.caseIds[currentCaseIdx];stopCaseTiming(cid);saveCurrentSelections(cid);currentCaseIdx--;renderCase();window.scrollTo(0,0);}}
 function nextCase(){
   var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);
   if(currentCaseIdx<currentModule.caseIds.length-1){currentCaseIdx++;renderCase();window.scrollTo(0,0);}
@@ -600,7 +598,7 @@ function backToModules(){
   stopTimer();document.getElementById('complete-overlay').classList.remove('show');showModuleScreen();
 }
 function closeComplete(){document.getElementById('complete-overlay').classList.remove('show');backToModules();}
-function takeBreak(){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);stopTimer();document.getElementById('break-overlay').classList.add('show');}
+function takeBreak(){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);if(currentUser&&currentUser!==ADMIN_EMAIL)sbUpsertModSecs(currentUser,currentModule.id,sessionSeconds).catch(function(e){console.warn(e);});stopTimer();document.getElementById('break-overlay').classList.add('show');}
 function resumeFromBreak(){document.getElementById('break-overlay').classList.remove('show');startTimer();}
 function startTimer(){stopTimer();timerInterval=setInterval(function(){sessionSeconds++;var h=String(Math.floor(sessionSeconds/3600)).padStart(2,'0'),m=String(Math.floor((sessionSeconds%3600)/60)).padStart(2,'0'),s=String(sessionSeconds%60).padStart(2,'0');document.getElementById('hdr-timer').textContent=h+':'+m+':'+s;},1000);}
 function stopTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null;}}
@@ -620,7 +618,19 @@ function buildExportRows(caseIds){
 }
 function exportModuleResults(){var rows=buildExportRows(currentModule.caseIds);sendToSheets(currentModule.label,rows);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,currentModule.label);XLSX.writeFile(wb,'MRI_'+currentModule.label.replace(/ /g,'_')+'_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
 function finishEvaluation(){var allIds=Array.from({length:100},function(_,i){return i;});var rows=buildExportRows(allIds);sendToSheets('All Results',rows);var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:15},{wch:8},{wch:30},{wch:50},{wch:80}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'All Results');XLSX.writeFile(wb,'MRI_Assessment_ALL_'+currentUser+'_'+new Date().toISOString().slice(0,10)+'.xlsx');}
-window.addEventListener('beforeunload',function(){if(currentModule&&currentUser){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);}});
+window.addEventListener('beforeunload',function(){
+  if(currentModule&&currentUser&&currentUser!==ADMIN_EMAIL){
+    var caseId=currentModule.caseIds[currentCaseIdx];
+    stopCaseTiming(caseId);
+    var opts=document.querySelectorAll('#seq-options .seq-option.selected');
+    var selected=Array.from(opts).map(function(o){return o.dataset.seqId;});
+    var ud=getUserData();ud.answers[caseId]=selected;ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);
+    // Use sendBeacon for reliable delivery on page close
+    var t=(ud.caseTimes&&ud.caseTimes[caseId])||0;
+    var payload={module:currentModule.label,email:currentUser,case_id:caseId,selected_sequences:JSON.stringify(selected),time_spent_seconds:t};
+    navigator.sendBeacon('https://bbkxrnbqediqdsqcimdy.supabase.co/rest/v1/user_answers',JSON.stringify(payload));
+  }
+});
 
 </script>
 
