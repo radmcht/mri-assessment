@@ -475,10 +475,16 @@ function renderAdminPanel(ap){
   }).join('');
   ap.innerHTML='<div class="admin-panel"><h4>&#128737; Admin — User Management ('+users.length+' users)</h4>'+rows+'</div>';
 }
-function adminDeleteUser(email){
+async function adminDeleteUser(email){
   if(!confirm('Delete "'+email+'" and all their progress?'))return;
   var s=getStore();delete s[email];setStore(s);
+  try{
+    await supa.from('user_answers').delete().eq('email',email);
+    await supa.from('module_seconds').delete().eq('email',email);
+    await supa.from('users').delete().eq('email',email);
+  }catch(e){console.warn('Delete error:',e);}
   renderAdminPanel(document.getElementById('admin-panel'));
+  renderExistingUsers();
 }
 function showModuleScreen(){
   document.getElementById('module-screen').classList.add('show');
