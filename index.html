@@ -4,6 +4,7 @@
 <title>MRI Protocol Assessment Tool</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --bg:#f5f6f8;--surface:#ffffff;--surface2:#eef0f4;--surface3:#e4e7ed;
@@ -362,6 +363,14 @@ var ABD_ALL=Object.values(ABD_SEQS).flat();
 var NEURO_ALL=Object.values(NEURO_SEQS).flat();
 var currentUser=null,currentModule=null,currentCaseIdx=0,timerInterval=null,sessionSeconds=0,caseStartTime=null;
 var ADMIN_EMAIL='mchtekici@gmail.com', ADMIN_PIN='3808';
+var supa=window.supabase.createClient('https://bbkxrnbqediqdsqcimdy.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJia3hybmJxZWRpcWRzcWNpbWR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0Mzk4MDksImV4cCI6MjA5NDAxNTgwOX0.x0WOJfLc_8rM2DchXlgQ6tQApaU0eYBjE7XTyjghzEI');
+async function sbGetUser(e){var r=await supa.from('users').select('pin').eq('email',e).maybeSingle();return r.data;}
+async function sbInsertUser(e,p){await supa.from('users').insert({email:e,pin:p});}
+async function sbGetAnswers(e){var r=await supa.from('user_answers').select('case_id,selected_sequences,time_spent_seconds').eq('email',e);return r.data||[];}
+async function sbUpsertAnswer(e,cid,seqs,t){await supa.from('user_answers').upsert({email:e,case_id:cid,selected_sequences:JSON.stringify(seqs),time_spent_seconds:t||0,updated_at:new Date().toISOString()},{onConflict:'email,case_id'});}
+async function sbGetModSecs(e){var r=await supa.from('module_seconds').select('module_id,seconds').eq('email',e);return r.data||[];}
+async function sbUpsertModSecs(e,mid,s){await supa.from('module_seconds').upsert({email:e,module_id:mid,seconds:s},{onConflict:'email,module_id'});}
+
 var WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyO203ko8bD7XO6_qfGuvY-0QooyMpA0SlPVL394jPSW7HJAb9srZbNkGfoe3-uEKzz_w/exec';
 function sendToSheets(moduleLabel,rows){
   var dataRows=rows.slice(1,rows.length-2);
@@ -406,36 +415,48 @@ function renderExistingUsers(){
   wrap.appendChild(cw);
 }
 function togglePin(){var i=document.getElementById('pin-input');i.type=i.type==='password'?'text':'password';}
-function doLogin(){
+async function doLogin(){
   var email=document.getElementById('email-input').value.trim().toLowerCase();
   var pin=document.getElementById('pin-input').value.trim();
   var err=document.getElementById('login-error');
+  var btn=document.querySelector('.login-btn');
   err.textContent='';
   if(!email){err.textContent='Please enter your e-mail.';return;}
-  if(!/^\S+@\S+\.\S+$/.test(email)){err.textContent='Please enter a valid e-mail.';return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err.textContent='Please enter a valid e-mail.';return;}
   if(!/^\d{4}$/.test(pin)){err.textContent='PIN must be exactly 4 digits.';return;}
-  var s=getStore();
-  // Admin check
-  if(email===ADMIN_EMAIL&&pin!==ADMIN_PIN){err.textContent='Incorrect PIN. Please try again.';return;}
-  if(email===ADMIN_EMAIL&&pin===ADMIN_PIN){
+  // Admin
+  if(email===ADMIN_EMAIL){
+    if(pin!==ADMIN_PIN){err.textContent='Incorrect PIN. Please try again.';return;}
+    currentUser=email;document.getElementById('login-screen').classList.remove('show');showModuleScreen();return;
+  }
+  btn.textContent='Signing in...';btn.disabled=true;
+  try{
+    var existing=await sbGetUser(email);
+    if(existing){
+      if(existing.pin!==pin){err.textContent='Incorrect PIN. Please try again.';btn.textContent='Continue';btn.disabled=false;return;}
+    }else{
+      await sbInsertUser(email,pin);
+    }
     currentUser=email;
+    var s=getStore();
+    if(!s[email])s[email]={pin:pin,answers:{},moduleSeconds:{},caseTimes:{}};
+    s[email].pin=pin;
+    var rows=await sbGetAnswers(email);
+    rows.forEach(function(r){
+      try{s[email].answers[r.case_id]=JSON.parse(r.selected_sequences);}catch(e2){}
+      if(!s[email].caseTimes)s[email].caseTimes={};
+      s[email].caseTimes[r.case_id]=r.time_spent_seconds||0;
+    });
+    var mods=await sbGetModSecs(email);
+    mods.forEach(function(m){s[email].moduleSeconds[m.module_id]=m.seconds;});
+    setStore(s);
     document.getElementById('login-screen').classList.remove('show');
     showModuleScreen();
-    return;
+  }catch(ex){
+    err.textContent='Connection error. Please try again.';
+    console.error(ex);
   }
-  if(s[email]&&s[email].pin){
-    if(s[email].pin!==pin){err.textContent='Incorrect PIN. Please try again.';return;}
-  }else{
-    if(!s[email])s[email]={};
-    s[email].pin=pin;
-    if(!s[email].answers)s[email].answers={};
-    if(!s[email].moduleSeconds)s[email].moduleSeconds={};
-    if(!s[email].caseTimes)s[email].caseTimes={};
-    setStore(s);
-  }
-  currentUser=email;
-  document.getElementById('login-screen').classList.remove('show');
-  showModuleScreen();
+  btn.textContent='Continue';btn.disabled=false;
 }
 
 function renderAdminPanel(ap){
@@ -541,6 +562,7 @@ function saveCurrentSelections(caseId){
   var opts=document.querySelectorAll('#seq-options .seq-option.selected');
   var selected=Array.from(opts).map(function(o){return o.dataset.seqId;});
   var ud=getUserData();ud.answers[caseId]=selected;ud.lastCase=currentCaseIdx;saveUserData(ud);
+  if(currentUser&&currentUser!==ADMIN_EMAIL){var t=(ud.caseTimes&&ud.caseTimes[caseId])||0;sbUpsertAnswer(currentUser,caseId,selected,t).catch(function(e){console.warn('SB:',e);});}
 }
 function prevCase(){if(currentCaseIdx>0){stopCaseTiming(currentModule.caseIds[currentCaseIdx]);currentCaseIdx--;renderCase();window.scrollTo(0,0);}}
 function nextCase(){
@@ -555,7 +577,11 @@ function nextCase(){
   }
 }
 function backToModules(){
-  if(currentModule){var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);}
+  if(currentModule){
+    var caseId=currentModule.caseIds[currentCaseIdx];stopCaseTiming(caseId);saveCurrentSelections(caseId);
+    var ud=getUserData();ud.moduleSeconds[currentModule.id]=sessionSeconds;saveUserData(ud);
+    if(currentUser&&currentUser!==ADMIN_EMAIL)sbUpsertModSecs(currentUser,currentModule.id,sessionSeconds).catch(function(e){console.warn(e);});
+  }
   stopTimer();document.getElementById('complete-overlay').classList.remove('show');showModuleScreen();
 }
 function closeComplete(){document.getElementById('complete-overlay').classList.remove('show');backToModules();}
